@@ -1,0 +1,29 @@
+# Secrets
+.env
+
+# Claude Code (settings.local.json is per-developer; .claude/commands/ is shared and tracked)
+.claude/settings.local.json
+
+# Foundry
+keypo-account/out/
+keypo-account/cache/
+keypo-account/lib/
+keypo-account/broadcast/
+keypo-account/.env
+
+# Rust
+keypo-wallet/target/
+
+# Swift
+keypo-signer-cli/.build/
+
+# Node
+node_modules/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
