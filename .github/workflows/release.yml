@@ -1,0 +1,134 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log Swift version
+        run: swift --version
+
+      - name: Verify version
+        run: |
+          SOURCE_VERSION=$(grep 'public let keypoVersion =' Sources/KeypoCore/Models.swift | sed 's/.*"\(.*\)".*/\1/')
+          TAG_VERSION=${GITHUB_REF_NAME#v}
+          if [ "$SOURCE_VERSION" != "$TAG_VERSION" ]; then
+            echo "Version mismatch: tag=$TAG_VERSION source=$SOURCE_VERSION"; exit 1
+          fi
+          echo "VERSION=$TAG_VERSION" >> $GITHUB_ENV
+
+      - name: Run unit tests
+        run: swift test
+
+      - name: Build release binary
+        run: swift build -c release
+
+      - name: Verify architecture
+        run: |
+          file .build/release/keypo-signer | grep -q arm64 || {
+            echo "Binary is not arm64"; exit 1
+          }
+
+      - name: Import signing certificate
+        env:
+          DEVELOPER_ID_CERT_P12: ${{ secrets.DEVELOPER_ID_CERT_P12 }}
+          DEVELOPER_ID_CERT_PASSWORD: ${{ secrets.DEVELOPER_ID_CERT_PASSWORD }}
+          CI_KEYCHAIN_PASSWORD: ${{ secrets.CI_KEYCHAIN_PASSWORD }}
+        run: |
+          echo "$DEVELOPER_ID_CERT_P12" | base64 --decode > certificate.p12
+          security create-keychain -p "$CI_KEYCHAIN_PASSWORD" ci.keychain
+          security default-keychain -s ci.keychain
+          security unlock-keychain -p "$CI_KEYCHAIN_PASSWORD" ci.keychain
+          security set-keychain-settings -t 3600 -u ci.keychain
+          security import certificate.p12 -k ci.keychain \
+            -P "$DEVELOPER_ID_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$CI_KEYCHAIN_PASSWORD" ci.keychain
+          security list-keychains -d user -s ci.keychain login.keychain
+          rm certificate.p12
+
+      - name: Code-sign binary
+        env:
+          DEVELOPER_ID_CERT_NAME: ${{ secrets.DEVELOPER_ID_CERT_NAME }}
+        run: |
+          codesign --force --sign "$DEVELOPER_ID_CERT_NAME" \
+            --options runtime --timestamp .build/release/keypo-signer
+          codesign --verify --deep --strict .build/release/keypo-signer
+
+      - name: Notarize binary
+        env:
+          NOTARIZATION_APPLE_ID: ${{ secrets.NOTARIZATION_APPLE_ID }}
+          NOTARIZATION_TEAM_ID: ${{ secrets.NOTARIZATION_TEAM_ID }}
+          NOTARIZATION_APP_PASSWORD: ${{ secrets.NOTARIZATION_APP_PASSWORD }}
+        run: |
+          ditto -c -k .build/release/keypo-signer keypo-signer.zip
+          SUBMIT_OUTPUT=$(xcrun notarytool submit keypo-signer.zip \
+            --apple-id "$NOTARIZATION_APPLE_ID" \
+            --team-id "$NOTARIZATION_TEAM_ID" \
+            --password "$NOTARIZATION_APP_PASSWORD" \
+            --wait --timeout 600 2>&1) || {
+            echo "$SUBMIT_OUTPUT"
+            SUBMISSION_ID=$(echo "$SUBMIT_OUTPUT" | grep 'id:' | head -1 | awk '{print $2}')
+            if [ -n "$SUBMISSION_ID" ]; then
+              xcrun notarytool log "$SUBMISSION_ID" \
+                --apple-id "$NOTARIZATION_APPLE_ID" \
+                --team-id "$NOTARIZATION_TEAM_ID" \
+                --password "$NOTARIZATION_APP_PASSWORD"
+            fi
+            exit 1
+          }
+          echo "$SUBMIT_OUTPUT"
+          rm keypo-signer.zip
+
+      - name: Create archive
+        run: |
+          test -f LICENSE || { echo "LICENSE file missing"; exit 1; }
+          ARCHIVE="keypo-signer-${VERSION}-macos-arm64.tar.gz"
+          mkdir -p staging
+          cp .build/release/keypo-signer staging/
+          cp LICENSE staging/
+          tar -czf "$ARCHIVE" -C staging .
+          SHA256=$(shasum -a 256 "$ARCHIVE" | awk '{print $1}')
+          echo "ARCHIVE=$ARCHIVE" >> $GITHUB_ENV
+          echo "SHA256=$SHA256" >> $GITHUB_ENV
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "::notice::SHA256: $SHA256"
+          printf "## SHA256\n\`%s\`\n" "$SHA256" > release_notes.md
+          if gh release view "v$VERSION" &>/dev/null; then
+            gh release upload "v$VERSION" "$ARCHIVE" --clobber
+          else
+            gh release create "v$VERSION" "$ARCHIVE" \
+              --title "keypo-signer v$VERSION" \
+              --notes-file release_notes.md \
+              --generate-notes
+          fi
+
+      - name: Update Homebrew formula
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          gh workflow run update-formula.yml \
+            --repo keypo-us/homebrew-tap \
+            -f version=$VERSION \
+            -f sha256=$SHA256
+
+      - name: Clean up keychain
+        if: always()
+        run: security delete-keychain ci.keychain || true
