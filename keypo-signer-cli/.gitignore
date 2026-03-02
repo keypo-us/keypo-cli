@@ -1,0 +1,31 @@
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# Xcode
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+DerivedData/
+*.xcscmblueprint
+
+# macOS
+.DS_Store
+._*
+
+# Build artifacts
+*.o
+*.dSYM/
+*.ipa
+
+# Distribution
+*.tar.gz
+*.zip
+
+# IDE
+.vscode/
+.idea/
+
+# keypo-signer runtime (never commit real key metadata)
+.keypo/
