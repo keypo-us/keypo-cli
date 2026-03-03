@@ -79,9 +79,25 @@ public class SecureEnclaveManager {
     public func signData(_ data: Data, dataRepresentation: Data) throws -> Data {
         let privateKey = try loadPrivateKey(dataRepresentation: dataRepresentation)
         do {
-            // Pass raw input bytes — CryptoKit hashes with SHA-256 internally (standard ES256)
-            let signature = try privateKey.signature(for: data)
-            return signature.derRepresentation
+            if data.count == 32 {
+                // Pre-hashed signing: the caller passes a 32-byte digest (e.g. keccak256).
+                // CryptoKit's signature(for: Data) would SHA-256 hash it again, producing
+                // a signature over SHA256(digest) instead of digest — breaking on-chain
+                // P-256 verification which checks against the raw digest.
+                //
+                // The fix: cast the 32 bytes to SHA256Digest and use signature(for: Digest)
+                // which signs the digest directly without additional hashing.
+                // SHA256Digest is a 32-byte value type, so the memory layout matches.
+                let digest: SHA256Digest = data.withUnsafeBytes { ptr in
+                    ptr.baseAddress!.assumingMemoryBound(to: SHA256Digest.self).pointee
+                }
+                let signature = try privateKey.signature(for: digest)
+                return signature.derRepresentation
+            } else {
+                // Non-digest data: let CryptoKit hash with SHA-256 (standard ES256)
+                let signature = try privateKey.signature(for: data)
+                return signature.derRepresentation
+            }
         } catch {
             throw KeypoError.signingFailed(error.localizedDescription)
         }

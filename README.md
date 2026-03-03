@@ -14,24 +14,121 @@ ERC-4337 smart wallet with P-256 (Secure Enclave) signing, EIP-7702 delegation, 
 
 ## Prerequisites
 
-- **macOS** — required for Secure Enclave signing via `keypo-signer`. Development and unit testing work on Linux using `MockSigner`.
-- **Rust 1.91+** — required by alloy 1.7
+- **macOS with Apple Silicon** — required for Secure Enclave signing via `keypo-signer`
+- **Rust 1.91+** — required by alloy 1.7 ([install](https://rustup.rs/))
 - **keypo-signer** — install via Homebrew:
   ```bash
   brew install keypo-us/tap/keypo-signer
   ```
 
-## Quickstart
+## Getting Started
+
+### 1. Install keypo-wallet
 
 ```bash
-# 1. Set up a smart account on Base Sepolia
+# Clone the repo
+git clone https://github.com/keypo-us/keypo-wallet.git
+cd keypo-wallet
+
+# Build and install the CLI
+cd keypo-wallet && cargo install --path .
+```
+
+This installs `keypo-wallet` to `~/.cargo/bin/`. Make sure `~/.cargo/bin` is on your PATH (rustup sets this up automatically).
+
+Alternatively, run without installing via `cargo run --`:
+
+```bash
+cd keypo-wallet && cargo run -- setup --key my-key --rpc https://sepolia.base.org
+```
+
+### 2. Create a Secure Enclave signing key
+
+```bash
+# Create a key with biometric protection (Touch ID required to sign)
+keypo-signer create --label my-key --policy biometric
+
+# Or create a key with no auth gate (useful for testing)
+keypo-signer create --label my-key --policy open
+```
+
+Verify the key was created:
+
+```bash
+keypo-signer list
+```
+
+### 3. Set up a smart account
+
+This creates an EIP-7702 delegation from an EOA to the KeypoAccount contract and registers your P-256 public key as the account owner.
+
+```bash
 keypo-wallet setup --key my-key --rpc https://sepolia.base.org
+```
 
-# 2. Send a transaction (requires bundler)
-keypo-wallet send --key my-key --to 0x... --value 0 --bundler https://...
+The `setup` command will:
+1. Look up your key's P-256 public key via `keypo-signer`
+2. Generate an ephemeral secp256k1 key (the EOA)
+3. Sign an EIP-7702 authorization delegating the EOA to the KeypoAccount contract
+4. Send a transaction that delegates + calls `initialize(qx, qy)` to register your key
+5. Save the account record to `~/.keypo/accounts.json`
 
-# 3. Check balances
-keypo-wallet balance --key my-key
+**Funding:** The setup transaction requires a small amount of ETH for gas. If `TEST_FUNDER_PRIVATE_KEY` is set in your environment, the account is auto-funded. Otherwise, the CLI will print the new account address and wait for you to send ETH to it manually (e.g. from a faucet or another wallet).
+
+### 4. Send a transaction
+
+Transactions are submitted as ERC-4337 UserOperations via a bundler. You need a bundler URL (e.g. from [Pimlico](https://pimlico.io/)):
+
+```bash
+keypo-wallet send \
+  --key my-key \
+  --to 0xRecipientAddress \
+  --value 1000000000000000 \
+  --bundler "https://api.pimlico.io/v2/84532/rpc?apikey=YOUR_API_KEY" \
+  --rpc https://sepolia.base.org
+```
+
+With a paymaster (gas sponsored — no ETH needed in the account):
+
+```bash
+keypo-wallet send \
+  --key my-key \
+  --to 0xRecipientAddress \
+  --value 0 \
+  --data 0xCalldata \
+  --bundler "https://api.pimlico.io/v2/84532/rpc?apikey=YOUR_API_KEY" \
+  --paymaster "https://api.pimlico.io/v2/84532/rpc?apikey=YOUR_API_KEY" \
+  --rpc https://sepolia.base.org
+```
+
+### 5. Send a batch of calls
+
+Create a JSON file with the calls:
+
+```json
+[
+  {"to": "0xAddr1", "value": "0x0", "data": "0x"},
+  {"to": "0xAddr2", "value": "0x38d7ea4c68000", "data": "0x1234"}
+]
+```
+
+```bash
+keypo-wallet batch --key my-key --calls calls.json \
+  --bundler "https://..." --rpc https://sepolia.base.org
+```
+
+### 6. Check your account
+
+```bash
+# View account info (reads local state, no RPC needed)
+keypo-wallet info --key my-key
+
+# Check ETH balance
+keypo-wallet balance --key my-key --rpc https://sepolia.base.org
+
+# Check an ERC-20 token balance
+keypo-wallet balance --key my-key --token 0xTokenContractAddress \
+  --rpc https://sepolia.base.org
 ```
 
 ## CLI Commands

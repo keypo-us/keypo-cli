@@ -306,7 +306,7 @@ pub fn format_info(account: &AccountRecord, chain_filter: Option<u64>) -> String
         "{} ({}):\n",
         account.key_label, account.key_policy
     ));
-    out.push_str(&format!("  Address: {}\n", short_address(account.address)));
+    out.push_str(&format!("  Address: {}\n", account.address));
     out.push_str("  Chains:\n");
 
     let chains: Vec<&ChainDeployment> = match chain_filter {
@@ -322,8 +322,7 @@ pub fn format_info(account: &AccountRecord, chain_filter: Option<u64>) -> String
         out.push_str(&format!("    {}:\n", display_chain(chain.chain_id)));
         out.push_str(&format!(
             "      Impl:     {} @ {}\n",
-            chain.implementation_name,
-            short_address(chain.implementation)
+            chain.implementation_name, chain.implementation
         ));
         out.push_str(&format!("      Deployed: {}\n", chain.deployed_at));
     }
@@ -772,9 +771,9 @@ mod tests {
         let account = test_account();
         let info = format_info(&account, Some(84532));
         assert!(info.contains("testnet-key (biometric):"));
-        assert!(info.contains("Address: 0x9876...5432"));
+        assert!(info.contains("Address: 0x9876543210987654321098765432109876545432"));
         assert!(info.contains("Base Sepolia (84532):"));
-        assert!(info.contains("KeypoAccount @ 0x1234...5678"));
+        assert!(info.contains("KeypoAccount @ 0x1234567890123456789012345678901234565678"));
         assert!(info.contains("Deployed: 2026-03-01T12:00:00Z"));
         // Should not contain the other chain
         assert!(!info.contains("Ethereum (1):"));
