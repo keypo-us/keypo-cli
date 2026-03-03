@@ -117,4 +117,34 @@ The `balance` command accepts `--query <file.json>` for structured queries:
 
 ## Environment
 
-Copy `.env.example` to `.env` and fill in your values. See `.env.example` for required variables. The `.env` file is gitignored and should never be committed.
+Create a `.env` file at the repo root (gitignored — never commit it):
+
+```bash
+cp .env.example .env
+# Then fill in your values
+```
+
+| Variable | Used by | Description |
+|---|---|---|
+| `PIMLICO_API_KEY` | CLI (via `--bundler` URL) | Pimlico bundler API key — used to construct the bundler URL passed to `--bundler` |
+| `BASE_SEPOLIA_RPC_URL` | CLI (`--rpc`, `--bundler`) | Base Sepolia RPC/bundler endpoint |
+| `PAYMASTER_URL` | CLI (`--paymaster`) | ERC-7677 paymaster endpoint for gas sponsorship |
+| `PIMLICO_SPONSORSHIP_POLICY_ID` | CLI (`--paymaster-policy`) | Optional paymaster sponsorship policy ID |
+| `TEST_FUNDER_PRIVATE_KEY` | CLI (`setup`) | If set, `setup` auto-funds the new account from this key instead of waiting for manual funding |
+| `DEPLOYER_PRIVATE_KEY` | Foundry scripts | Private key for contract deployments (not used by the CLI) |
+| `BASESCAN_API_KEY` | Foundry verify | Basescan API key for contract verification (not used by the CLI) |
+
+The CLI reads URLs and keys from **command-line flags** (`--rpc`, `--bundler`, `--paymaster`, `--paymaster-policy`), not directly from `.env`. The `.env` file is a convenient place to store these values — you can source it or reference the variables in your shell:
+
+```bash
+# Source .env and use variables in CLI flags
+source .env
+keypo-wallet send --key my-key --to 0x... --value 0 \
+  --bundler "$BASE_SEPOLIA_RPC_URL" \
+  --paymaster "$PAYMASTER_URL" \
+  --rpc https://sepolia.base.org
+```
+
+The one exception is `TEST_FUNDER_PRIVATE_KEY` — the `setup` command reads this directly from the environment. If set, it auto-funds the new account; otherwise, `setup` waits for you to manually send ETH to the account address.
+
+Foundry (`keypo-account/`) auto-loads `.env` from its working directory via a symlink (`keypo-account/.env` → `../.env`).
