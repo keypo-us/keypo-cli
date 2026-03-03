@@ -152,6 +152,14 @@ enum Commands {
         /// Path to query JSON file
         #[arg(long)]
         query: Option<String>,
+
+        /// RPC URL override
+        #[arg(long)]
+        rpc: Option<String>,
+
+        /// Output format (table/json/csv)
+        #[arg(long)]
+        format: Option<String>,
     },
 }
 
@@ -208,14 +216,15 @@ async fn main() {
         } => {
             run_batch(key, calls, chain_id, bundler, paymaster, paymaster_policy, rpc).await
         }
-        Commands::Info { .. } => {
-            println!("info: not implemented");
-            Ok(())
-        }
-        Commands::Balance { .. } => {
-            println!("balance: not implemented");
-            Ok(())
-        }
+        Commands::Info { key, chain_id } => run_info(key, chain_id).await,
+        Commands::Balance {
+            key,
+            chain_id,
+            token,
+            query,
+            rpc,
+            format,
+        } => run_balance(key, chain_id, token, query, rpc, format).await,
     };
 
     if let Err(e) = result {
@@ -421,6 +430,163 @@ async fn run_batch(
     Ok(())
 }
 
+async fn run_info(
+    key: String,
+    chain_id: Option<u64>,
+) -> std::result::Result<(), Box<dyn std::error::Error>> {
+    let state = StateStore::open()?;
+    let account = state
+        .find_accounts_for_key(&key)
+        .ok_or_else(|| format!("no account found for key '{key}'"))?;
+
+    let output = keypo_wallet::query::format_info(account, chain_id);
+    print!("{output}");
+    Ok(())
+}
+
+async fn run_balance(
+    key: String,
+    chain_id: Option<u64>,
+    token: Option<String>,
+    query_path: Option<String>,
+    rpc_override: Option<String>,
+    format_override: Option<String>,
+) -> std::result::Result<(), Box<dyn std::error::Error>> {
+    use alloy::providers::ProviderBuilder;
+    use keypo_wallet::query;
+    use keypo_wallet::types::{BalanceQuery, TokenBalance};
+
+    let state = StateStore::open()?;
+    let account = state
+        .find_accounts_for_key(&key)
+        .ok_or_else(|| format!("no account found for key '{key}'"))?
+        .clone();
+
+    // Parse query file if provided
+    let balance_query: Option<BalanceQuery> = match query_path {
+        Some(ref path) => {
+            let contents = std::fs::read_to_string(path)
+                .map_err(|_| format!("query file not found: '{path}'"))?;
+            let q: BalanceQuery = serde_json::from_str(&contents)
+                .map_err(|e| format!("failed to parse query JSON: {e}"))?;
+            Some(q)
+        }
+        None => None,
+    };
+
+    // Resolve chains
+    let chains =
+        query::resolve_chains(&account, chain_id, balance_query.as_ref())?;
+
+    // Resolve tokens
+    let tokens = query::resolve_tokens(
+        token.as_deref(),
+        balance_query.as_ref(),
+    )?;
+
+    // Determine output format: CLI --format > query.format > "table"
+    let fmt = format_override
+        .or_else(|| balance_query.as_ref().map(|q| q.format.clone()))
+        .unwrap_or_else(|| "table".to_string());
+    if !["table", "json", "csv"].contains(&fmt.as_str()) {
+        return Err(format!("unsupported format: '{fmt}'. Expected: table, json, csv").into());
+    }
+
+    // Determine sort_by and min_balance from query
+    let sort_by = balance_query.as_ref().and_then(|q| q.sort_by.clone());
+    let min_balance = balance_query
+        .as_ref()
+        .and_then(|q| q.tokens.as_ref())
+        .and_then(|tf| tf.min_balance.clone());
+
+    // Query balances
+    let mut balances: Vec<TokenBalance> = Vec::new();
+    let mut had_rpc_error = false;
+
+    for chain in &chains {
+        let rpc_url = rpc_override.as_deref().unwrap_or(&chain.rpc_url);
+        let url: url::Url = match rpc_url.parse() {
+            Ok(u) => u,
+            Err(e) => {
+                eprintln!(
+                    "Warning: failed to query {}: invalid RPC URL: {e}",
+                    query::display_chain(chain.chain_id)
+                );
+                had_rpc_error = true;
+                continue;
+            }
+        };
+        let provider = ProviderBuilder::new().connect_http(url);
+
+        for token_str in &tokens {
+            if query::is_native_token(token_str) {
+                match query::query_native_balance(&provider, account.address).await {
+                    Ok(balance) => {
+                        balances.push(TokenBalance {
+                            chain_id: chain.chain_id,
+                            token: "ETH".into(),
+                            symbol: None,
+                            balance,
+                            decimals: 18,
+                        });
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "Warning: failed to query {}: {e}",
+                            query::display_chain(chain.chain_id)
+                        );
+                        had_rpc_error = true;
+                    }
+                }
+            } else {
+                let token_addr: Address = token_str.parse().map_err(|e| {
+                    format!("invalid token address '{token_str}': {e}")
+                })?;
+                match query::query_erc20_balance(&provider, token_addr, account.address).await {
+                    Ok(balance) => {
+                        let decimals =
+                            query::query_erc20_decimals(&provider, token_addr).await;
+                        let symbol =
+                            query::query_erc20_symbol(&provider, token_addr).await;
+                        balances.push(TokenBalance {
+                            chain_id: chain.chain_id,
+                            token: token_str.clone(),
+                            symbol,
+                            balance,
+                            decimals,
+                        });
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "Warning: failed to query {}: {e}",
+                            query::display_chain(chain.chain_id)
+                        );
+                        had_rpc_error = true;
+                    }
+                }
+            }
+        }
+    }
+
+    if balances.is_empty() && had_rpc_error {
+        return Err("failed to query all chains".into());
+    }
+
+    // Sort and filter
+    query::sort_balances(&mut balances, sort_by.as_deref());
+    query::apply_min_balance_filter(&mut balances, min_balance.as_deref());
+
+    // Format output
+    let output = match fmt.as_str() {
+        "json" => query::format_balance_json(&account, &balances),
+        "csv" => query::format_balance_csv(&account, &balances),
+        _ => query::format_balance_table(&account, &balances),
+    };
+    print!("{output}");
+
+    Ok(())
+}
+
 fn load_deployments_impl() -> KeypoAccountImpl {
     // Try CARGO_MANIFEST_DIR (works for cargo run), fall back to relative path
     let deployments_dir = option_env!("CARGO_MANIFEST_DIR")
@@ -621,6 +787,39 @@ mod tests {
                 assert_eq!(key, "my-key");
                 assert_eq!(token, Some("0xUSDC".into()));
                 assert_eq!(query, Some("query.json".into()));
+            }
+            _ => panic!("expected Balance"),
+        }
+    }
+
+    #[test]
+    fn balance_args_with_rpc_and_format() {
+        let cli = Cli::try_parse_from([
+            "keypo-wallet",
+            "balance",
+            "--key",
+            "my-key",
+            "--chain-id",
+            "84532",
+            "--rpc",
+            "https://custom-rpc.example.com",
+            "--format",
+            "json",
+        ])
+        .unwrap();
+
+        match cli.command {
+            Commands::Balance {
+                key,
+                chain_id,
+                rpc,
+                format,
+                ..
+            } => {
+                assert_eq!(key, "my-key");
+                assert_eq!(chain_id, Some(84532));
+                assert_eq!(rpc, Some("https://custom-rpc.example.com".into()));
+                assert_eq!(format, Some("json".into()));
             }
             _ => panic!("expected Balance"),
         }

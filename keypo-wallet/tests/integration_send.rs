@@ -215,12 +215,8 @@ async fn test_send_with_paymaster() {
         data: Bytes::new(),
     };
 
-    // Pimlico requires sponsorshipPolicyId in context
-    let pm_context = std::env::var("PIMLICO_SPONSORSHIP_POLICY_ID")
-        .ok()
-        .map(|id| serde_json::json!({"sponsorshipPolicyId": id}));
-
-    let result = transaction::execute_with_context(&account, &chain, &[call], &imp, &signer, pm_context)
+    // Pimlico testnet sponsors without a policy ID
+    let result = transaction::execute_with_context(&account, &chain, &[call], &imp, &signer, None)
         .await
         .expect("paymaster-sponsored send should succeed");
 

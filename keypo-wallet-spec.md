@@ -265,9 +265,10 @@ keypo-wallet/
 │   ├── bundler.rs              # ERC-7769 bundler JSON-RPC client
 │   ├── paymaster.rs            # ERC-7677 paymaster client
 │   ├── transaction.rs          # UserOperation construction and signing
+│   ├── query.rs                # Multi-chain, multi-token balance queries + info formatting
+│   ├── rpc.rs                  # Shared JSON-RPC helper (used by bundler + paymaster)
 │   ├── state.rs                # Local state persistence
-│   ├── balance.rs              # Multi-chain, multi-token balance queries
-│   ├── types.rs                # Shared types (Call, P256PublicKey, etc.)
+│   ├── types.rs                # Shared types (Call, P256PublicKey, BalanceQuery, etc.)
 │   └── error.rs                # Error types
 ├── src/bin/
 │   └── main.rs                 # CLI entry point
@@ -277,7 +278,8 @@ keypo-wallet/
 │   └── all-tokens.json
 └── tests/
     ├── integration_setup.rs    # End-to-end setup on Base Sepolia
-    └── integration_send.rs     # End-to-end transaction on Base Sepolia
+    ├── integration_send.rs     # End-to-end transaction on Base Sepolia
+    └── integration_balance.rs  # Balance query on Base Sepolia
 ```
 
 ### 4.3 Core Types
@@ -656,14 +658,22 @@ keypo-wallet setup
 keypo-wallet send
     --key <LABEL>                 # keypo-signer key label (required)
     --to <ADDR>                   # Recipient (required)
-    --value <AMOUNT>              # ETH amount (default: 0)
+    --value <AMOUNT>              # ETH amount in wei (default: 0)
     --data <HEX>                  # Calldata (optional)
     --chain-id <ID>               # Chain (inferred from state if unambiguous)
+    --bundler <URL>               # Bundler RPC URL override (optional)
+    --paymaster <URL>             # Paymaster URL override (optional)
+    --paymaster-policy <ID>       # Sponsorship policy ID (optional)
+    --rpc <URL>                   # Standard RPC URL override (optional)
 
 keypo-wallet batch
     --key <LABEL>                 # (required)
     --calls <FILE>                # JSON: [{to, value, data}, ...] (required)
     --chain-id <ID>
+    --bundler <URL>               # Bundler RPC URL override (optional)
+    --paymaster <URL>             # Paymaster URL override (optional)
+    --paymaster-policy <ID>       # Sponsorship policy ID (optional)
+    --rpc <URL>                   # Standard RPC URL override (optional)
 
 keypo-wallet info
     --key <LABEL>                 # Show accounts for this key (all chains if no --chain-id)
@@ -672,8 +682,10 @@ keypo-wallet info
 keypo-wallet balance
     --key <LABEL>                 # (required)
     --chain-id <ID>               # Filter to specific chain (optional; default: all chains)
-    --token <SYMBOL_OR_ADDR>      # Filter to specific token (optional; default: all tokens)
+    --token <ADDR>                # Filter to specific token address (optional; default: ETH)
     --query <FILE>                # Structured query file for advanced filtering (optional)
+    --rpc <URL>                   # RPC URL override (optional)
+    --format <FMT>                # Output format: table | json | csv (default: table)
 ```
 
 ### 5.2 Example Session (Base Sepolia)
@@ -865,9 +877,9 @@ For tests that exercise the WebAuthn signature path (the `encode_webauthn_signat
 | 2 | alloy EIP-7702 API | **CONFIRMED** | `Authorization` struct + `sign_authorization` + `with_authorization_list` all present. Verify `sign_authorization` on `Signer` trait vs two-step fallback. |
 | 3 | Paymaster API | **RESOLVED** | Use ERC-7677 standard (`pm_getPaymasterStubData` + `pm_getPaymasterData`). Single implementation, no trait needed. See §4.8. |
 | 4 | PackedUserOperation format | **CONFIRMED** | Matches v0.7. BundlerClient needs packed→unpacked serialization for RPC. |
-| 5 | Gas fee sourcing | **DESIGN** | How to set maxFeePerGas on UserOp — bundler suggestion vs provider query. Pimlico offers `pimlico_getUserOperationGasPrice` as optional extension. |
-| 6 | ERC-4337 nonce scheme | **DESIGN** | 2D nonce (192-bit key + 64-bit seq). How OZ Account manages this. |
+| 5 | Gas fee sourcing | **RESOLVED** | `eth_gasPrice * 3/2` for maxFee, `eth_maxPriorityFeePerGas` with 0.1 gwei fallback. Always via standard RPC, never bundler URL. Implemented in Phase 4. |
+| 6 | ERC-4337 nonce scheme | **RESOLVED** | `EntryPoint.getNonce(sender, uint192(0))` via raw ABI call. Uses key=0 (sequential nonce). Implemented in Phase 4. |
 | 7 | CI test infrastructure | **PLAN** | Base Sepolia faucet automation or pre-funded accounts. Secrets configured in Phase 0. Mock-signer test account for on-chain validation. |
 | 8 | ERC-7821 mode encoding | **BUG — FIXED** | Mode `0x00` is invalid. Single calls must use batch mode `0x01` with a 1-element array. `encode_execute` updated. See §3 and §3.1. |
 | 9 | WebAuthn signature encoding | **DESIGN** | The trait supports WebAuthn via `encode_webauthn_signature()`. The exact encoding format depends on OZ's WebAuthn library. Document after OZ integration in Phase 1. |
-| 10 | Balance token discovery | **DESIGN** | How to discover ERC-20 tokens on each chain. Options: token list registry, indexer API (Alchemy, Covalent), or manual configuration. |
+| 10 | Balance token discovery | **RESOLVED (PARTIAL)** | ERC-20 tokens are queried by contract address via `--token <ADDR>` or query file `tokens.include`. Symbol-based lookup ("USDC") is not yet supported — returns a helpful error directing users to use the contract address. Automatic token discovery (indexer APIs, token list registries) deferred. |

@@ -1,4 +1,8 @@
 use alloy::primitives::{Address, Bytes, B256, U256};
+
+fn default_format() -> String {
+    "table".to_string()
+}
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -63,6 +67,39 @@ pub struct AccountRecord {
     pub public_key: P256PublicKey,
     pub chains: Vec<ChainDeployment>,
     pub created_at: String,
+}
+
+/// Structured balance query file (spec §5.3).
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct BalanceQuery {
+    #[serde(default)]
+    pub chains: Vec<u64>,
+    #[serde(default)]
+    pub tokens: Option<TokenFilter>,
+    #[serde(default = "default_format")]
+    pub format: String,
+    #[serde(default)]
+    pub sort_by: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct TokenFilter {
+    #[serde(default)]
+    pub include: Vec<String>,
+    #[serde(default)]
+    pub exclude: Vec<String>,
+    #[serde(default)]
+    pub min_balance: Option<String>,
+}
+
+/// Result of a balance query for a single token on a single chain.
+#[derive(Debug, Clone)]
+pub struct TokenBalance {
+    pub chain_id: u64,
+    pub token: String,
+    pub symbol: Option<String>,
+    pub balance: U256,
+    pub decimals: u8,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -188,6 +225,47 @@ mod tests {
         assert_eq!(info.policy, "open");
         assert_eq!(info.signing_count, 42);
         assert_eq!(info.last_used_at, Some("2026-03-01T12:00:00Z".to_string()));
+    }
+
+    #[test]
+    fn balance_query_serde_full() {
+        let query = BalanceQuery {
+            chains: vec![84532, 1],
+            tokens: Some(TokenFilter {
+                include: vec!["ETH".into(), "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913".into()],
+                exclude: vec![],
+                min_balance: Some("0.001".into()),
+            }),
+            format: "json".into(),
+            sort_by: Some("balance".into()),
+        };
+        let json = serde_json::to_string(&query).unwrap();
+        let decoded: BalanceQuery = serde_json::from_str(&json).unwrap();
+        assert_eq!(decoded.chains, vec![84532, 1]);
+        assert_eq!(decoded.format, "json");
+        assert_eq!(decoded.sort_by, Some("balance".into()));
+        let tokens = decoded.tokens.unwrap();
+        assert_eq!(tokens.include.len(), 2);
+        assert_eq!(tokens.min_balance, Some("0.001".into()));
+    }
+
+    #[test]
+    fn balance_query_serde_minimal() {
+        let decoded: BalanceQuery = serde_json::from_str("{}").unwrap();
+        assert!(decoded.chains.is_empty());
+        assert!(decoded.tokens.is_none());
+        assert_eq!(decoded.format, "table");
+        assert!(decoded.sort_by.is_none());
+    }
+
+    #[test]
+    fn balance_query_serde_partial() {
+        let json = r#"{"chains": [84532], "format": "csv"}"#;
+        let decoded: BalanceQuery = serde_json::from_str(json).unwrap();
+        assert_eq!(decoded.chains, vec![84532]);
+        assert_eq!(decoded.format, "csv");
+        assert!(decoded.tokens.is_none());
+        assert!(decoded.sort_by.is_none());
     }
 
     #[test]

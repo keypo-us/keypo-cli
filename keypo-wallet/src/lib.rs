@@ -3,6 +3,7 @@ pub mod bundler;
 pub mod error;
 pub mod impls;
 pub mod paymaster;
+pub mod query;
 pub(crate) mod rpc;
 pub mod signer;
 pub mod state;
