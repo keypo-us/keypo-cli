@@ -568,9 +568,9 @@ set -a && source .env && set +a && \
 cargo test --test integration_setup -- --ignored --test-threads=1
 ```
 
-### 3.7 Manual End-to-End Test (Human Testing — Last)
+### 3.7 Manual End-to-End Test (Human Testing — Last) ✅
 
-Run the full setup flow against testnet with the real `KeypoSigner`:
+Ran the full setup flow against Base Sepolia with the real `KeypoSigner` (Secure Enclave `test-open` key, policy `open`):
 
 ```bash
 keypo-wallet setup \
@@ -579,14 +579,16 @@ keypo-wallet setup \
     --rpc https://sepolia.base.org
 ```
 
-Fund the ephemeral EOA from faucet (or set `TEST_FUNDER_PRIVATE_KEY` for auto-funding). Confirm:
+Used `TEST_FUNDER_PRIVATE_KEY` for auto-funding. All checks confirmed:
 
-- Transaction succeeds
-- EOA code is `0xef0100 || implementation_address` (verify via `cast code <address>`)
-- P-256 public key is stored: `cast call <address> "signer()(bytes32,bytes32)"` returns correct (qx, qy)
-- `~/.keypo/accounts.json` is written correctly with the chain deployment record
+- **Transaction succeeded:** Setup tx `0x5bb3d6fd48d7dc1f24283ceb29abe5479e502cbd8067542556278c94de2bddfb`
+- **Delegation code:** `cast code 0xC66025eaa0aaA2d2619F70423d8c0246625EBc13` → `0xef01006d1566f9aacf9c06969d7bf846fa090703a38e43`
+- **P-256 key stored:** `cast call 0xC66025eaa0aaA2d2619F70423d8c0246625EBc13 "signer()(bytes32,bytes32)"` → matches `test-open` key coordinates (`qx=0xc8ecfc...de5e`, `qy=0x5c7ebd...785a`)
+- **State persisted:** `~/.keypo/accounts.json` written with correct address, key label, public key, and chain deployment record
 
-**Milestone: `keypo-wallet setup` creates a working smart account on testnet. All 67 automated tests pass. 4 integration tests verified on live Base Sepolia. P-256 key readable via `signer()` on the delegated EOA.**
+**Account address:** `0xC66025eaa0aaA2d2619F70423d8c0246625EBc13` (Base Sepolia, controlled by Secure Enclave `test-open` key)
+
+**Milestone: `keypo-wallet setup` creates a working smart account on testnet, controlled by a Secure Enclave P-256 key. All 67 automated tests pass. 4 integration tests verified on live Base Sepolia. Manual end-to-end test confirmed with real `KeypoSigner`.**
 
 ---
 
