@@ -14,10 +14,7 @@ use alloy::providers::ProviderBuilder;
 static INIT_TRACING: Once = Once::new();
 fn init_tracing() {
     INIT_TRACING.call_once(|| {
-        tracing_subscriber::fmt()
-            .with_test_writer()
-            .try_init()
-            .ok();
+        tracing_subscriber::fmt().with_test_writer().try_init().ok();
     });
 }
 
@@ -27,8 +24,7 @@ use keypo_wallet::query;
 use keypo_wallet::signer::mock::MockSigner;
 use keypo_wallet::state::StateStore;
 
-const KEYPO_ACCOUNT_ADDR: Address =
-    address!("0x6d1566f9aAcf9c06969D7BF846FA090703A38E43");
+const KEYPO_ACCOUNT_ADDR: Address = address!("0x6d1566f9aAcf9c06969D7BF846FA090703A38E43");
 const BASE_SEPOLIA_RPC: &str = "https://sepolia.base.org";
 const BASE_SEPOLIA_CHAIN_ID: u64 = 84532;
 
@@ -86,7 +82,10 @@ async fn test_balance_native_after_setup() {
         .expect("balance query should succeed");
 
     // After setup, balance should be > 0 (funded)
-    assert!(!balance.is_zero(), "balance should be > 0 after setup funding");
+    assert!(
+        !balance.is_zero(),
+        "balance should be > 0 after setup funding"
+    );
 }
 
 #[tokio::test]

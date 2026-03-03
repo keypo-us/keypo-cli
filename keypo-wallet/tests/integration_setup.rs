@@ -14,10 +14,7 @@ use alloy::primitives::{address, Address};
 static INIT_TRACING: Once = Once::new();
 fn init_tracing() {
     INIT_TRACING.call_once(|| {
-        tracing_subscriber::fmt()
-            .with_test_writer()
-            .try_init()
-            .ok();
+        tracing_subscriber::fmt().with_test_writer().try_init().ok();
     });
 }
 use keypo_wallet::account::{self, FundingStrategy, SetupConfig, SETUP_FUNDING_AMOUNT};
@@ -26,8 +23,7 @@ use keypo_wallet::signer::mock::MockSigner;
 use keypo_wallet::signer::P256Signer;
 use keypo_wallet::state::StateStore;
 
-const KEYPO_ACCOUNT_ADDR: Address =
-    address!("0x6d1566f9aAcf9c06969D7BF846FA090703A38E43");
+const KEYPO_ACCOUNT_ADDR: Address = address!("0x6d1566f9aAcf9c06969D7BF846FA090703A38E43");
 const BASE_SEPOLIA_RPC: &str = "https://sepolia.base.org";
 const BASE_SEPOLIA_CHAIN_ID: u64 = 84532;
 

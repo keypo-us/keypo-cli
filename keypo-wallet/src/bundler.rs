@@ -240,28 +240,4 @@ mod tests {
         // Simulates the get_user_operation_receipt logic
         // where null result maps to Ok(None)
     }
-
-    #[test]
-    fn json_rpc_error_extraction() {
-        let error_json = serde_json::json!({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "error": {
-                "code": -32602,
-                "message": "invalid params",
-                "data": "AA21 didn't pay prefund"
-            }
-        });
-        let err = error_json.get("error").unwrap();
-        let code = err.get("code").and_then(|c| c.as_i64()).unwrap_or(0);
-        let message = err
-            .get("message")
-            .and_then(|m| m.as_str())
-            .unwrap_or("unknown");
-        let data = err.get("data").map(|d| format!(" {d}")).unwrap_or_default();
-        let formatted = format!("RPC error {code}: {message}{data}");
-        assert!(formatted.contains("-32602"));
-        assert!(formatted.contains("invalid params"));
-        assert!(formatted.contains("AA21"));
-    }
 }

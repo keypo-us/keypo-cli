@@ -11,15 +11,27 @@ use keypo_wallet::types::Call;
 use keypo_wallet::AccountImplementation;
 
 #[derive(Parser)]
-#[command(name = "keypo-wallet", about = "Keypo smart wallet CLI")]
+#[command(
+    name = "keypo-wallet",
+    about = "Keypo smart wallet CLI",
+    long_about = "Keypo smart wallet CLI — manage ERC-4337 smart accounts with P-256 (Secure Enclave) signing.\n\n\
+        Requires keypo-signer for key management: brew install keypo-us/tap/keypo-signer"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
+
+    /// Enable verbose debug output
+    #[arg(long, global = true)]
+    verbose: bool,
 }
 
 #[derive(Subcommand)]
 enum Commands {
     /// Set up a smart account on a chain
+    #[command(long_about = "Set up a smart account on a chain.\n\n\
+            Signs an EIP-7702 delegation to the KeypoAccount implementation, then sends an \
+            initialization transaction to register the P-256 public key as the account owner.")]
     Setup {
         /// Key label for the signing key
         #[arg(long)]
@@ -55,6 +67,9 @@ enum Commands {
     },
 
     /// Send a transaction
+    #[command(long_about = "Send a transaction via the ERC-4337 bundler.\n\n\
+            Builds a UserOp, signs it with the P-256 key via keypo-signer, and submits it \
+            to the bundler. Use --paymaster for gas sponsorship.")]
     Send {
         /// Key label for the signing key
         #[arg(long)]
@@ -94,6 +109,9 @@ enum Commands {
     },
 
     /// Send a batch of calls
+    #[command(long_about = "Send a batch of calls in a single UserOp.\n\n\
+            Reads a JSON file containing an array of {to, value, data} objects and executes \
+            them atomically via ERC-7821 batch mode.")]
     Batch {
         /// Key label for the signing key
         #[arg(long)]
@@ -125,6 +143,9 @@ enum Commands {
     },
 
     /// Show account info
+    #[command(long_about = "Show account info from local state (no RPC calls).\n\n\
+            Displays the account address, key label, and chain deployments stored in \
+            ~/.keypo/accounts.json.")]
     Info {
         /// Key label for the signing key
         #[arg(long)]
@@ -136,6 +157,11 @@ enum Commands {
     },
 
     /// Check account balance
+    #[command(
+        long_about = "Check account balance for native ETH and ERC-20 tokens.\n\n\
+            Supports --token for specific ERC-20 contract addresses, --query for JSON \
+            query files, and --format for table/json/csv output."
+    )]
     Balance {
         /// Key label for the signing key
         #[arg(long)]
@@ -165,9 +191,19 @@ enum Commands {
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt().try_init().ok();
-
     let cli = Cli::parse();
+
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        if cli.verbose {
+            tracing_subscriber::EnvFilter::new("keypo_wallet=debug")
+        } else {
+            tracing_subscriber::EnvFilter::new("keypo_wallet=warn")
+        }
+    });
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .try_init()
+        .ok();
 
     let result = match cli.command {
         Commands::Setup {
@@ -249,6 +285,11 @@ async fn main() {
 
     if let Err(e) = result {
         eprintln!("Error: {e}");
+        if let Some(ke) = e.downcast_ref::<keypo_wallet::Error>() {
+            if let Some(hint) = ke.suggestion() {
+                eprintln!("  Hint: {hint}");
+            }
+        }
         std::process::exit(1);
     }
 }
@@ -883,5 +924,18 @@ mod tests {
         assert_eq!(calls[0].value, U256::ZERO);
         assert_eq!(calls[1].value, U256::from(0x38d7ea4c68000u64));
         assert_eq!(calls[1].data, Bytes::from(vec![0x12, 0x34]));
+    }
+
+    #[test]
+    fn verbose_flag_parses() {
+        let cli =
+            Cli::try_parse_from(["keypo-wallet", "--verbose", "info", "--key", "my-key"]).unwrap();
+        assert!(cli.verbose);
+    }
+
+    #[test]
+    fn long_about_present() {
+        use clap::CommandFactory;
+        assert!(Cli::command().get_long_about().is_some());
     }
 }

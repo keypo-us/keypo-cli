@@ -78,7 +78,13 @@ impl KeypoSigner {
         let output = std::process::Command::new(&self.binary)
             .args(args)
             .output()
-            .map_err(|e| Error::SignerCommand(format!("failed to run {}: {}", self.binary, e)))?;
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    Error::SignerNotFound(self.binary.clone())
+                } else {
+                    Error::SignerCommand(format!("failed to run {}: {}", self.binary, e))
+                }
+            })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);

@@ -1,13 +1,13 @@
-use alloy::primitives::{Address, Bytes, U256, B256};
+use alloy::primitives::{Address, Bytes, B256, U256};
 use alloy::sol_types::SolCall;
 use alloy::sol_types::SolValue;
 
 use keypo_wallet::impls::KeypoAccountImpl;
-use keypo_wallet::traits::AccountImplementation;
-use keypo_wallet::types::Call;
 use keypo_wallet::signer::mock::MockSigner;
 use keypo_wallet::signer::P256Signer;
 use keypo_wallet::state::StateStore;
+use keypo_wallet::traits::AccountImplementation;
+use keypo_wallet::types::Call;
 use keypo_wallet::types::{ChainDeployment, P256PublicKey};
 
 alloy::sol! {

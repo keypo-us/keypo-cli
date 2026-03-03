@@ -24,19 +24,14 @@ use keypo_wallet::types::Call;
 static INIT_TRACING: Once = Once::new();
 fn init_tracing() {
     INIT_TRACING.call_once(|| {
-        tracing_subscriber::fmt()
-            .with_test_writer()
-            .try_init()
-            .ok();
+        tracing_subscriber::fmt().with_test_writer().try_init().ok();
     });
 }
 
-const KEYPO_ACCOUNT_ADDR: Address =
-    address!("0x6d1566f9aAcf9c06969D7BF846FA090703A38E43");
+const KEYPO_ACCOUNT_ADDR: Address = address!("0x6d1566f9aAcf9c06969D7BF846FA090703A38E43");
 const BASE_SEPOLIA_RPC: &str = "https://sepolia.base.org";
 const BASE_SEPOLIA_CHAIN_ID: u64 = 84532;
-const ENTRY_POINT_V07: Address =
-    address!("0x0000000071727De22E5E9d8BAf0edAc6f37da032");
+const ENTRY_POINT_V07: Address = address!("0x0000000071727De22E5E9d8BAf0edAc6f37da032");
 
 fn funder_key() -> String {
     std::env::var("TEST_FUNDER_PRIVATE_KEY")
@@ -204,9 +199,7 @@ async fn test_send_with_paymaster() {
 
     // Ensure bundler + paymaster URLs are set
     chain.bundler_url = Some(bundler_url());
-    chain.paymaster_url = Some(
-        std::env::var("PAYMASTER_URL").expect("PAYMASTER_URL"),
-    );
+    chain.paymaster_url = Some(std::env::var("PAYMASTER_URL").expect("PAYMASTER_URL"));
 
     // Build a 0-value self-transfer — gas sponsored by paymaster
     let call = Call {

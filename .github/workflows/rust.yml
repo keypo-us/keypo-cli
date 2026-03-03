@@ -1,0 +1,52 @@
+name: Rust
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "keypo-wallet/**"
+      - ".github/workflows/rust.yml"
+  pull_request:
+    paths:
+      - "keypo-wallet/**"
+      - ".github/workflows/rust.yml"
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: keypo-wallet
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # alloy 1.7 requires Rust 1.91+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            keypo-wallet/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('keypo-wallet/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Check
+        run: cargo check --all-targets
+
+      - name: Test
+        run: cargo test
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
