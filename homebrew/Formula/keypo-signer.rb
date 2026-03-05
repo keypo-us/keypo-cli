@@ -5,7 +5,7 @@ class KeypoSigner < Formula
   license "MIT"
 
   url "https://github.com/keypo-us/keypo-wallet/releases/download/v#{version}/keypo-wallet-#{version}-macos-arm64.tar.gz"
-  sha256 "PLACEHOLDER"
+  sha256 "957511aea2108d05ecc5ed6b9629879308899cf5752b3a294a4760236910159a"
 
   depends_on macos: :sonoma
   depends_on arch: :arm64
@@ -14,6 +14,8 @@ class KeypoSigner < Formula
     url :stable
     strategy :github_latest
   end
+
+  conflicts_with "keypo-wallet", because: "keypo-wallet includes keypo-signer"
 
   def install
     bin.install "keypo-signer"

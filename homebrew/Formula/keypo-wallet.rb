@@ -5,7 +5,7 @@ class KeypoWallet < Formula
   license "MIT"
 
   url "https://github.com/keypo-us/keypo-wallet/releases/download/v#{version}/keypo-wallet-#{version}-macos-arm64.tar.gz"
-  sha256 "PLACEHOLDER"
+  sha256 "957511aea2108d05ecc5ed6b9629879308899cf5752b3a294a4760236910159a"
 
   depends_on macos: :sonoma
   depends_on arch: :arm64
@@ -31,8 +31,10 @@ class KeypoWallet < Formula
     EOS
   end
 
+  conflicts_with "keypo-signer", because: "keypo-wallet includes keypo-signer"
+
   test do
-    system "#{bin}/keypo-wallet", "--version"
-    system "#{bin}/keypo-signer", "--version"
+    system "#{bin}/keypo-wallet", "--help"
+    assert_match version.to_s, shell_output("#{bin}/keypo-signer info --system")
   end
 end
