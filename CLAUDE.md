@@ -21,7 +21,7 @@ keypo-wallet/                    # Monorepo root
 │   ├── Package.swift
 │   ├── Sources/
 │   ├── Tests/
-│   ├── SPEC.md                  # Canonical CLI specification
+│   ├── README.md                # Overview, install, commands
 │   └── JSON-FORMAT.md           # JSON output format reference
 ├── homebrew/                    # Homebrew tap (migrated from keypo-us/homebrew-tap)
 │   └── Formula/keypo-signer.rb
@@ -32,11 +32,11 @@ keypo-wallet/                    # Monorepo root
 └── .github/workflows/           # CI workflows
 ```
 
-## Spec Documents
+## Spec Documents (archived)
 
-- `keypo-wallet-spec.md` — Rust crate + CLI specification
-- `keypo-account-spec.md` — Solidity smart account specification
-- `keypo-implementation-roadmap.md` — Phased implementation plan
+- `docs/archive/specs/keypo-wallet-spec.md` — Rust crate + CLI specification
+- `docs/archive/specs/keypo-account-spec.md` — Solidity smart account specification
+- `docs/archive/specs/keypo-signer-spec.md` — Swift CLI specification
 
 ## Phase 0 Findings (Corrections to Specs)
 

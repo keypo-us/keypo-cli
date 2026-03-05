@@ -4,7 +4,7 @@
 
 keypo-signer is a macOS CLI tool that manages P-256 signing keys inside the Apple Secure Enclave. It creates keys, signs data, rotates keys, and deletes keys. It outputs JSON by default. It is deliberately minimal — it signs bytes and returns signatures, nothing else.
 
-The full specification is in `SPEC.md` at the project root. That document is the source of truth for all behavior, output formats, exit codes, and test cases. Read it before making changes.
+The full specification is in `../docs/archive/specs/keypo-signer-spec.md`. That document is the source of truth for all behavior, output formats, exit codes, and test cases. Read it before making changes.
 
 ## Tech Stack
 
@@ -21,7 +21,7 @@ The full specification is in `SPEC.md` at the project root. That document is the
 keypo-signer/
 ├── Package.swift
 ├── CLAUDE.md
-├── SPEC.md
+├── README.md
 ├── Sources/
 │   ├── keypo-signer/          # Executable target — CLI entry point
 │   │   └── main.swift         # Argument parsing, command routing, output formatting
@@ -90,7 +90,7 @@ swift test
 
 ## Testing
 
-Tests are defined in SPEC.md. **You MUST pass ALL tests in Categories 1-6 before the implementation is considered complete.** These are automated tests using open-policy keys and can run without human interaction. Do not move on to new features or optimizations until every test in Categories 1-6 passes.
+Tests are defined in ../docs/archive/specs/keypo-signer-spec.md. **You MUST pass ALL tests in Categories 1-6 before the implementation is considered complete.** These are automated tests using open-policy keys and can run without human interaction. Do not move on to new features or optimizations until every test in Categories 1-6 passes.
 
 Category 7 requires human interaction (passcode and biometric policies) and will be run manually by the developer.
 

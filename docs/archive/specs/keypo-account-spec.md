@@ -187,34 +187,24 @@ For the WebAuthn path, `userOpHash` becomes the WebAuthn challenge.
 ## 3. Project Structure
 
 ```
-keypo-wallet/                    # Monorepo root
-├── keypo-account/               # This project
-│   ├── foundry.toml
-│   ├── remappings.txt
-│   ├── src/
-│   │   └── KeypoAccount.sol
-│   ├── test/
-│   │   ├── KeypoAccount.t.sol         # Unit tests (including dual-path signature validation)
-│   │   ├── KeypoAccountSetup.t.sol    # EIP-7702 delegation + initialization tests
-│   │   ├── KeypoAccount4337.t.sol     # ERC-4337 UserOperation validation tests
-│   │   └── helpers/
-│   │       └── P256Helper.sol         # Wycheproof test vectors for P-256
-│   ├── script/
-│   │   ├── Deploy.s.sol               # CREATE2 deployment script
-│   │   └── Verify.s.sol               # Post-deployment verification
-│   └── out/                           # Build artifacts (gitignored)
-├── deployments/                 # Shared deployment records (repo root)
-│   ├── base-sepolia.json
-│   ├── base.json
-│   └── README.md
-├── tests/                       # Top-level tests (repo root)
-│   ├── integration/
-│   └── webauthn-frontend/       # Test-only WebAuthn frontend (localhost:3000)
-│       ├── index.html
-│       ├── package.json
-│       └── playwright.config.ts
-└── ...
+keypo-account/
+├── foundry.toml
+├── remappings.txt
+├── src/
+│   └── KeypoAccount.sol
+├── test/
+│   ├── KeypoAccount.t.sol
+│   ├── KeypoAccountSetup.t.sol
+│   ├── KeypoAccount4337.t.sol
+│   └── helpers/
+│       └── P256Helper.sol
+├── script/
+│   ├── Deploy.s.sol
+│   └── Verify.s.sol
+└── out/
 ```
+
+See root `README.md` for the full monorepo layout.
 
 ### 3.1 Foundry Configuration
 
@@ -485,17 +475,9 @@ To use a different smart account implementation with `keypo-wallet`:
 
 ---
 
-## 8. Open Items
+## 8. Future Work
 
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| 1 | Base Sepolia Pectra status | **VERIFIED** | EIP-7702 type-4 transactions confirmed on Base Sepolia. |
-| 2 | Foundry Prague EVM support | **VERIFIED** | `forge test` supports EIP-7702 cheatcodes with `evm_version = "prague"`. |
-| 3 | `Initializable` storage slot collision | **VERIFIED** | Fresh-EOA-only stipulation (§2.4). Re-delegation is out of scope. |
-| 4 | `_erc7821AuthorizedExecutor` correctness | **VERIFIED** | `caller` is `address(this)` in the EntryPoint → `executeUserOp` → `execute` flow. |
-| 5 | Safe Singleton Factory on Base Sepolia | **VERIFIED** | `0x4e59b44847b379578588920cA78FbF26c0B4956C` is deployed on Base Sepolia. |
-| 6 | EntryPoint v0.7 on Base Sepolia | **VERIFIED** | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` is deployed on Base Sepolia. |
-| 7 | RIP-7212 on Base Sepolia | **VERIFIED** | P-256 precompile is active on Base Sepolia. |
-| 8 | P-256 test vector generation | **RESOLVED** | Use Wycheproof P1363 vectors from C2SP/wycheproof. Hardcode a handful for unit tests, optionally parse full JSON for comprehensive coverage. See §4.4. |
-| 9 | WebAuthn signature encoding format | **DESIGN** | Confirm exact encoding format expected by OZ's `WebAuthn.verify()`. Document how `authenticatorData`, `clientDataJSON`, `r`, `s`, and challenge index are packed into the `signature` bytes field. |
-| 10 | WebAuthn low-S enforcement | **VERIFY** | Confirm whether OZ's `WebAuthn.verify()` enforces low-S normalization or if the contract must enforce it before calling. |
+| 1 | WebAuthn signature encoding format | **DESIGN** | Confirm exact encoding format expected by OZ's `WebAuthn.verify()`. Document how `authenticatorData`, `clientDataJSON`, `r`, `s`, and challenge index are packed into the `signature` bytes field. |
+| 2 | WebAuthn low-S enforcement | **VERIFY** | Confirm whether OZ's `WebAuthn.verify()` enforces low-S normalization or if the contract must enforce it before calling. |

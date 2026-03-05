@@ -50,52 +50,7 @@ Key policies supported by keypo-signer-cli:
 
 ## 2. Architecture
 
-```
-┌──────────────────────────────────────────────────────────┐
-│                     keypo-wallet CLI                     │
-│         (clap argument parsing, output formatting)       │
-└────────────────────────────┬─────────────────────────────┘
-                             │
-┌────────────────────────────▼─────────────────────────────┐
-│                    keypo-wallet crate                     │
-│                                                          │
-│  ┌──────────────────────────────────────────────────┐    │
-│  │           AccountImplementation trait              │    │
-│  │  (pluggable: KeypoAccount, custom)                │    │
-│  │                                                    │    │
-│  │  - encode_initialize(qx, qy) -> Bytes              │    │
-│  │  - encode_execute(calls) -> Bytes                  │    │
-│  │  - encode_signature(r, s) -> Bytes                 │    │
-│  │  - implementation_address(chain_id) -> Address     │    │
-│  └──────────────────┬───────────────────────────┘    │
-│                         │                                │
-│  ┌──────────┐  ┌────────▼────────┐  ┌───────────────┐   │
-│  │ AccountMgr│  │  TxBuilder      │  │ BundlerClient │   │
-│  │           │  │                 │  │ (ERC-7769)    │   │
-│  │ - setup() │  │ - build_uo()   │  │ - send_uo()   │   │
-│  │ - state   │  │ - estimate()   │  │ - estimate()  │   │
-│  │           │  │ - user_op_hash │  │ - receipt()   │   │
-│  └──────┬───┘  └────────┬────────┘  └───────┬───────┘   │
-│         │               │                   │           │
-│  ┌──────▼───────────────▼───────────────────▼─────────┐  │
-│  │                   alloy-rs layer                    │  │
-│  │  Provider, ABI encoding, EIP-7702 auth, RPC, types │  │
-│  └────────────────────────────────────────────────────┘  │
-│                                                          │
-│  ┌────────────────────┐  ┌──────────────┐  ┌──────────┐ │
-│  │    KeypoSigner     │  │  StateStore  │  │ Paymaster│ │
-│  │  (subprocess)      │  │  (~/.keypo/) │  │ (ERC-7677)│ │
-│  └────────┬───────────┘  └──────────────┘  └──────────┘ │
-└───────────┼──────────────────────────────────────────────┘
-            │ subprocess call
-┌───────────▼──────────────────────────────────────────────┐
-│                    keypo-signer CLI                       │
-│            (Secure Enclave P-256 signing)                 │
-│   github.com/keypo-us/keypo-signer-cli — see SPEC.md    │
-└──────────────────────────────────────────────────────────┘
-```
-
-**Detailed architecture diagrams** (wallet creation flow, transaction sending flow, paymaster integration, component overview) are in [`docs/architecture.md`](docs/architecture.md).
+See [`docs/architecture.md`](docs/architecture.md) for detailed block diagrams covering wallet creation, transaction sending, paymaster integration, and component overview.
 
 ---
 
@@ -254,39 +209,28 @@ chrono = { version = "0.4", features = ["serde"] }
 ### 4.2 Module Structure
 
 ```
-keypo-wallet/
-├── Cargo.toml
-├── src/
-│   ├── lib.rs                  # Public crate API
-│   ├── traits.rs               # AccountImplementation trait
-│   ├── impls/
-│   │   ├── mod.rs
-│   │   └── keypo_account.rs    # Default KeypoAccount implementation
-│   ├── signer.rs               # KeypoSigner subprocess wrapper
-│   ├── account.rs              # Account setup (EIP-7702 delegation)
-│   ├── bundler.rs              # ERC-7769 bundler JSON-RPC client
-│   ├── paymaster.rs            # ERC-7677 paymaster client
-│   ├── transaction.rs          # UserOperation construction and signing
-│   ├── query.rs                # Multi-chain, multi-token balance queries + info formatting
-│   ├── rpc.rs                  # Shared JSON-RPC helper (used by bundler + paymaster)
-│   ├── state.rs                # Local state persistence
-│   ├── types.rs                # Shared types (Call, P256PublicKey, BalanceQuery, etc.)
-│   └── error.rs                # Error types + suggestion() method
-├── src/bin/
-│   └── main.rs                 # CLI entry point (--verbose, long_about, error hints)
-├── abi/                        # Contract ABIs (from keypo-account build)
-│   └── KeypoAccount.json
-├── query/                      # Example balance query files
-│   └── all-tokens.json
-└── tests/
-    ├── integration_setup.rs    # End-to-end setup on Base Sepolia
-    ├── integration_send.rs     # End-to-end transaction on Base Sepolia
-    └── integration_balance.rs  # Balance query on Base Sepolia
-
-docs/
-├── architecture.md             # Block diagrams: wallet creation, tx sending, paymaster flow
-└── manual-testing.md           # Manual test checklist for Phase 6.5
+keypo-wallet/src/
+├── lib.rs                  # Public crate API
+├── bin/
+│   └── main.rs             # CLI entry point (--verbose, long_about, error hints)
+├── traits.rs               # AccountImplementation trait
+├── impls/
+│   ├── mod.rs
+│   └── keypo_account.rs    # Default KeypoAccount implementation
+├── config.rs               # Config file loading, validation, 4-tier resolution
+├── signer.rs               # KeypoSigner subprocess wrapper
+├── account.rs              # Account setup (EIP-7702 delegation)
+├── bundler.rs              # ERC-7769 bundler JSON-RPC client
+├── paymaster.rs            # ERC-7677 paymaster client
+├── transaction.rs          # UserOperation construction and signing
+├── query.rs                # Multi-chain, multi-token balance queries + info formatting
+├── rpc.rs                  # Shared JSON-RPC helper (used by bundler + paymaster)
+├── state.rs                # Local state persistence
+├── types.rs                # Shared types (Call, P256PublicKey, BalanceQuery, etc.)
+└── error.rs                # Error types + suggestion() method
 ```
+
+See the root `CLAUDE.md` and `README.md` for the full monorepo layout.
 
 ### 4.3 Core Types
 
@@ -659,18 +603,113 @@ Persistent local state at `~/.keypo/accounts.json`. Multi-chain aware — each a
 
 ## 5. CLI Interface
 
-### 5.1 Commands
+### 5.0 Configuration
+
+#### Config File
+
+Location: `~/.keypo/config.toml` (alongside `~/.keypo/accounts.json`).
+
+```toml
+[network]
+rpc_url = "https://sepolia.base.org"
+bundler_url = "https://api.pimlico.io/v2/84532/rpc?apikey=YOUR_API_KEY"
+paymaster_url = "https://api.pimlico.io/v2/84532/rpc?apikey=YOUR_API_KEY"  # optional
+paymaster_policy_id = ""  # optional, provider-specific
+```
+
+All fields are optional. Missing fields fall back to CLI flags, then environment variables, then error.
+
+#### Flag Precedence (highest to lowest)
+
+1. CLI flag (`--rpc`, `--bundler`, `--paymaster`, `--paymaster-policy`)
+2. Environment variable (`KEYPO_RPC_URL`, `KEYPO_BUNDLER_URL`, `KEYPO_PAYMASTER_URL`, `KEYPO_PAYMASTER_POLICY_ID`)
+3. `~/.keypo/config.toml`
+4. Error: required value missing
+
+#### Config Validation
+
+On every invocation, `config.toml` is validated before the command runs:
+- **TOML syntax** -- malformed TOML is a hard error with line number and hint to run `keypo-wallet config edit`.
+- **Unknown keys** -- warning (not error), suggests typo.
+- **URL format** -- `rpc_url`, `bundler_url`, `paymaster_url` must be valid `http://` or `https://` URLs.
+
+If `config.toml` does not exist, validation is skipped silently.
+
+#### `init` Command
 
 ```
+keypo-wallet init
+```
+
+Interactive first-run setup. Prompts for RPC URL, bundler URL, and paymaster URL. Writes `~/.keypo/config.toml`. Non-destructive: prompts before overwriting an existing config.
+
+#### `config` Subcommands
+
+```
+keypo-wallet config set <key> <value>    # e.g. config set network.rpc_url https://...
+keypo-wallet config show                 # Print resolved config (API keys redacted; --reveal to show)
+keypo-wallet config edit                 # Open config.toml in $EDITOR (fallback: vi)
+```
+
+### 5.1 Commands
+
+#### Global Flags
+
+| Flag | Description |
+|---|---|
+| `--verbose` | Debug-level logging (RPC requests, subprocess calls, config resolution). Scoped to `keypo_wallet` targets. |
+| `--help` | Print usage and exit. |
+| `--version` | Print `keypo-wallet` and `keypo-signer` versions and exit. |
+
+#### Command Table
+
+| Command | Source | Description |
+|---|---|---|
+| `init` | **new** | Interactive first-run config setup |
+| `config set` | **new** | Update a config value |
+| `config show` | **new** | Print current resolved config (with env overrides) |
+| `config edit` | **new** | Open config file in `$EDITOR` |
+| `create` | keypo-signer | Create a Secure Enclave P-256 signing key |
+| `list` | keypo-signer | List all managed signing keys |
+| `key-info` | keypo-signer | Show info for a specific key |
+| `sign` | keypo-signer | Sign a raw digest with a key |
+| `verify` | keypo-signer | Verify a P-256 signature |
+| `delete` | keypo-signer | Delete a signing key |
+| `rotate` | keypo-signer | Rotate a key (create new, re-register on-chain) |
+| `setup` | keypo-wallet | EIP-7702 delegation + P-256 key registration |
+| `send` | keypo-wallet | Send a single transaction via ERC-4337 bundler |
+| `batch` | keypo-wallet | Send multiple calls atomically via ERC-7821 |
+| `wallet-list` | **new** | List all managed wallets (with optional live balances) |
+| `wallet-info` | **new** | Show detailed info for a single wallet |
+| `info` | keypo-wallet | Show account info from local state (retained for backward compat) |
+| `balance` | keypo-wallet | Query ETH and ERC-20 balances |
+
+#### Command Signatures
+
+```
+keypo-wallet init
+
+keypo-wallet config set <key> <value>
+keypo-wallet config show [--reveal]
+keypo-wallet config edit
+
+keypo-wallet create --label <LABEL> [--policy <open|passcode|biometric>]
+keypo-wallet list
+keypo-wallet key-info <LABEL>
+keypo-wallet sign <DIGEST> --key <LABEL>
+keypo-wallet verify <DIGEST> --signature <SIG> --key <LABEL>
+keypo-wallet delete <LABEL>
+keypo-wallet rotate <LABEL>
+
 keypo-wallet setup
     --key <LABEL>                 # keypo-signer key label (required)
     --key-policy <POLICY>         # Key protection: open | passcode | biometric (default: biometric)
-    --rpc <URL>                   # RPC endpoint (required)
-    --bundler <URL>               # Bundler endpoint (required)
+    [--rpc <URL>]                 # RPC endpoint (optional if set in config)
+    [--bundler <URL>]             # Bundler endpoint (optional if set in config)
     --chain-id <ID>               # Chain ID (auto-detected from RPC if omitted)
-    --paymaster <URL>             # ERC-7677 paymaster URL (optional)
+    [--paymaster <URL>]           # ERC-7677 paymaster URL (optional)
     --implementation <ADDR>       # Contract address (required for now; later: auto-resolve)
-    --impl-name <n>            # Trait implementation name (default: "KeypoAccount")
+    --impl-name <NAME>            # Trait implementation name (default: "KeypoAccount")
 
 keypo-wallet send
     --key <LABEL>                 # keypo-signer key label (required)
@@ -678,19 +717,32 @@ keypo-wallet send
     --value <AMOUNT>              # ETH amount in wei (default: 0)
     --data <HEX>                  # Calldata (optional)
     --chain-id <ID>               # Chain (inferred from state if unambiguous)
-    --bundler <URL>               # Bundler RPC URL override (optional)
-    --paymaster <URL>             # Paymaster URL override (optional)
+    [--bundler <URL>]             # Bundler RPC URL override (optional if set in config)
+    [--paymaster <URL>]           # Paymaster URL override (optional)
     --paymaster-policy <ID>       # Sponsorship policy ID (optional)
-    --rpc <URL>                   # Standard RPC URL override (optional)
+    [--rpc <URL>]                 # Standard RPC URL override (optional if set in config)
+    --no-paymaster                # Disable paymaster even if configured
 
 keypo-wallet batch
     --key <LABEL>                 # (required)
     --calls <FILE>                # JSON: [{to, value, data}, ...] (required)
     --chain-id <ID>
-    --bundler <URL>               # Bundler RPC URL override (optional)
-    --paymaster <URL>             # Paymaster URL override (optional)
+    [--bundler <URL>]             # Bundler RPC URL override (optional if set in config)
+    [--paymaster <URL>]           # Paymaster URL override (optional)
     --paymaster-policy <ID>       # Sponsorship policy ID (optional)
-    --rpc <URL>                   # Standard RPC URL override (optional)
+    [--rpc <URL>]                 # Standard RPC URL override (optional if set in config)
+    --no-paymaster                # Disable paymaster even if configured
+
+keypo-wallet wallet-list
+    [--rpc <URL>]                 # Override RPC for balance fetching
+    [--format <table|json|csv>]   # Output format (default: table)
+    [--no-truncate]               # Show full addresses
+    [--no-balance]                # Skip RPC balance fetch (offline, fast)
+
+keypo-wallet wallet-info
+    --key <LABEL>                 # (required)
+    [--rpc <URL>]                 # Override RPC for balance fetching
+    [--format <table|json>]       # Output format (default: table)
 
 keypo-wallet info
     --key <LABEL>                 # Show accounts for this key (all chains if no --chain-id)
@@ -701,7 +753,7 @@ keypo-wallet balance
     --chain-id <ID>               # Filter to specific chain (optional; default: all chains)
     --token <ADDR>                # Filter to specific token address (optional; default: ETH)
     --query <FILE>                # Structured query file for advanced filtering (optional)
-    --rpc <URL>                   # RPC URL override (optional)
+    [--rpc <URL>]                 # RPC URL override (optional if set in config)
     --format <FMT>                # Output format: table | json | csv (default: table)
 ```
 
@@ -888,17 +940,38 @@ For tests that exercise the WebAuthn signature path (the `encode_webauthn_signat
 
 ---
 
-## 8. Open Items
+## 8. Distribution
 
-| # | Item | Status | Notes |
-|---|------|--------|-------|
-| 1 | `keypo-signer` JSON output fields | **VERIFY IN PHASE 0** | Verify against [SPEC.md](https://github.com/keypo-us/keypo-signer-cli/blob/main/SPEC.md). Confirm: exact field names (`publicKey`, `r`, `s`) in `--format json` output. Test all three key policies. |
-| 2 | alloy EIP-7702 API | **CONFIRMED** | `Authorization` struct + `sign_authorization` + `with_authorization_list` all present. Verify `sign_authorization` on `Signer` trait vs two-step fallback. |
-| 3 | Paymaster API | **RESOLVED** | Use ERC-7677 standard (`pm_getPaymasterStubData` + `pm_getPaymasterData`). Single implementation, no trait needed. See §4.8. |
-| 4 | PackedUserOperation format | **CONFIRMED** | Matches v0.7. BundlerClient needs packed→unpacked serialization for RPC. |
-| 5 | Gas fee sourcing | **RESOLVED** | `eth_gasPrice * 3/2` for maxFee, `eth_maxPriorityFeePerGas` with 0.1 gwei fallback. Always via standard RPC, never bundler URL. Implemented in Phase 4. |
-| 6 | ERC-4337 nonce scheme | **RESOLVED** | `EntryPoint.getNonce(sender, uint192(0))` via raw ABI call. Uses key=0 (sequential nonce). Implemented in Phase 4. |
-| 7 | CI test infrastructure | **PLAN** | Base Sepolia faucet automation or pre-funded accounts. Secrets configured in Phase 0. Mock-signer test account for on-chain validation. |
-| 8 | ERC-7821 mode encoding | **BUG — FIXED** | Mode `0x00` is invalid. Single calls must use batch mode `0x01` with a 1-element array. `encode_execute` updated. See §3 and §3.1. |
-| 9 | WebAuthn signature encoding | **DESIGN** | The trait supports WebAuthn via `encode_webauthn_signature()`. The exact encoding format depends on OZ's WebAuthn library. Document after OZ integration in Phase 1. |
-| 10 | Balance token discovery | **RESOLVED (PARTIAL)** | ERC-20 tokens are queried by contract address via `--token <ADDR>` or query file `tokens.include`. Symbol-based lookup ("USDC") is not yet supported — returns a helpful error directing users to use the contract address. Automatic token discovery (indexer APIs, token list registries) deferred. |
+### 8.1 Homebrew Formula
+
+Distributed via `keypo-us/homebrew-tap`. The formula installs both the Rust binary (`keypo-wallet`) and the Swift binary (`keypo-signer`) from a single tarball.
+
+```bash
+brew tap keypo-us/tap
+brew install keypo-us/tap/keypo-wallet
+```
+
+Requires Apple Silicon (aarch64-apple-darwin). The formula enforces this at install time.
+
+### 8.2 Release Artifacts
+
+Each GitHub release (tagged `vX.Y.Z`) produces a single tarball: `keypo-wallet-aarch64-apple-darwin.tar.gz` containing both binaries. `keypo-signer` is co-installed to the same `bin/` path so the subprocess calling convention is unchanged.
+
+### 8.3 Version Coupling
+
+`keypo-wallet` and `keypo-signer` share a version number and are released together from a single git tag. This eliminates version skew between the two binaries.
+
+### 8.4 Standalone `keypo-signer`
+
+The existing `keypo-us/tap/keypo-signer` formula is maintained independently for users who only need Secure Enclave key management without wallet functionality.
+
+---
+
+## 9. Future Work
+
+| # | Item | Notes |
+|---|------|-------|
+| 1 | `init` non-interactive mode | `init --rpc <url> --bundler <url>` for scripted/CI setup without prompts. |
+| 2 | `rotate` cross-tool flow | Touches both Secure Enclave (new key) and on-chain account (re-register). Needs subsection once implementation begins. |
+| 3 | Balance token discovery | Symbol-based lookup ("USDC") and automatic token discovery (indexer APIs, token list registries) not yet supported. |
+| 4 | CI test infrastructure | Base Sepolia faucet automation or pre-funded accounts for CI. |

@@ -1,6 +1,11 @@
 # keypo-wallet
 
-ERC-4337 smart wallet with P-256 (Secure Enclave) signing, EIP-7702 delegation, and ERC-7821 batch execution.
+A CLI that turns your Mac into a programmable hardware wallet. Key features:
+
+- Create wallets with different signing policies: touchID, passcode or no policy. We use raw passkeys (P-256) with the ability to extend functionality to webauthn.
+- All wallet private keys are hardware bound: they never leave your mac's secure enclave. Apple can't even extract them.
+- Under the hood: the wallet's use EIP-7702 (smart account) delegation. To start we are using [Open Zeppelin's implementation](https://docs.openzeppelin.com/contracts/5.x/accounts) but this can be extended to any programmable logic you can think of. Please refer to [docs/architecture.md](docs/architecture.md) for more detailed information.
+- The product has 0 centralized dependencies. Key management happens locally using your secure enclave, smart contracts manage policies how how your keys can be used and an account abstraction (ERC-4337) bundler submits your transactions on your behalf. The example implementation uses Pimlico bundlers but the CLI is compatible with any popular bundler (Coinbase, Alchemy, etc). 
 
 ## Monorepo Structure
 
@@ -11,133 +16,115 @@ ERC-4337 smart wallet with P-256 (Secure Enclave) signing, EIP-7702 delegation, 
 | `keypo-signer-cli/` | Swift CLI — Secure Enclave P-256 key management (macOS) |
 | `homebrew/` | Homebrew tap formula for keypo-signer |
 | `deployments/` | Per-chain deployment records (JSON) |
+| `docs/` | Detailed documentation including technical architecture and how keypo-signer CLI works |
 
 ## Prerequisites
 
 - **macOS with Apple Silicon** — required for Secure Enclave signing via `keypo-signer`
-- **Rust 1.91+** — required by alloy 1.7 ([install](https://rustup.rs/))
-- **keypo-signer** — install via Homebrew:
-  ```bash
-  brew install keypo-us/tap/keypo-signer
-  ```
+- **Rust 1.91+** — only needed if building from source ([install](https://rustup.rs/))
 
 ## Getting Started
 
-### 1. Install keypo-wallet
+### 0. Prerequisites
+
+You'll need the following set up before installing the CLI:
+
+- An RPC provider URL. To start you can use the Base public RPC (https://sepolia.base.org) but there are many RPC providers you can use.
+- A bundler API key/URL. Lots of options here, the most popular being CDP, Alchemy and Pimlico. We used Pimlico, but any ERC4337 bundler works.
+- A paymaster API key/URL (optional). If you want to sponsor gas you'll need to set this up. Most bundler platforms give you the paymaster with the same URL/API key.
+- A small amount of ETH (~$2) in a seperate wallet. This is needed for paying gas to deploy the wallet during the initial setup.
+
+### 1. Install
 
 ```bash
-# Clone the repo
+# Via Homebrew (installs both keypo-wallet and keypo-signer)
+brew install keypo-us/tap/keypo-wallet
+
+# Or build from source
 git clone https://github.com/keypo-us/keypo-wallet.git
-cd keypo-wallet
-
-# Build and install the CLI
-cd keypo-wallet && cargo install --path .
+cd keypo-wallet/keypo-wallet && cargo install --path .
+# (keypo-signer must be installed separately: brew install keypo-us/tap/keypo-signer)
 ```
 
-This installs `keypo-wallet` to `~/.cargo/bin/`. Make sure `~/.cargo/bin` is on your PATH (rustup sets this up automatically).
-
-Alternatively, run without installing via `cargo run --`:
+### 2. Configure endpoints
 
 ```bash
-cd keypo-wallet && cargo run -- setup --key my-key --rpc https://sepolia.base.org
-```
-
-### 2. Create a Secure Enclave signing key
-
-```bash
-# Create a key with biometric protection (Touch ID required to sign)
-keypo-signer create --label my-key --policy biometric
-
-# Or create a key with no auth gate (useful for testing)
-keypo-signer create --label my-key --policy open
-```
-
-Verify the key was created:
-
-```bash
-keypo-signer list
+keypo-wallet init
+# Prompts for RPC URL, bundler URL, and optional paymaster URL (if you want to sponsor the wallet's gas payments).
+# Saves to ~/.keypo/config.toml — no need to pass --rpc/--bundler on every command.
 ```
 
 ### 3. Set up a smart account
 
-This creates an EIP-7702 delegation from an EOA to the KeypoAccount contract and registers your P-256 public key as the account owner.
-
 ```bash
-keypo-wallet setup --key my-key --rpc https://sepolia.base.org
+keypo-wallet setup --key my-key --key-policy my-policy
 ```
 
-The `setup` command will:
-1. Look up your key's P-256 public key via `keypo-signer`
-2. Generate an ephemeral secp256k1 key (the EOA)
-3. Sign an EIP-7702 authorization delegating the EOA to the KeypoAccount contract
-4. Send a transaction that delegates + calls `initialize(qx, qy)` to register your key
-5. Save the account record to `~/.keypo/accounts.json`
+This signs an EIP-7702 delegation to the KeypoAccount contract and registers your P-256 (passkey) public key as the owner. The account record is saved to `~/.keypo/accounts.json`.
 
-**Funding:** The setup transaction requires a small amount of ETH for gas. If `TEST_FUNDER_PRIVATE_KEY` is set in your environment, the account is auto-funded. Otherwise, the CLI will print the new account address and wait for you to send ETH to it manually (e.g. from a faucet or another wallet).
+**my-key** is set by the user and is the wallet identifier after setup. 
 
-### 4. Send a transaction
+**my-policy** is the signing policy you are setting for the wallet. Options are:
 
-Transactions are submitted as ERC-4337 UserOperations via a bundler. You need a bundler URL (e.g. from [Pimlico](https://pimlico.io/)):
+- open: No restrictions on signing transactions. Best for automated tasks like giving an AI agent access to a wallet.
+- passcode: All transaction signing requires entering the passcode associated with the Apple ID registered to the local Mac device. 
+- bio: All transaction signing requires touchID. 
 
-```bash
-keypo-wallet send \
-  --key my-key \
-  --to 0xRecipientAddress \
-  --value 1000000000000000 \
-  --bundler "https://api.pimlico.io/v2/84532/rpc?apikey=YOUR_API_KEY" \
-  --rpc https://sepolia.base.org
-```
+**Funding:** Setup requires a small amount of ETH for gas. The CLI prints the address and waits for you to send ETH manually. You should only need to send ~$1 of ETH. 
 
-With a paymaster (gas sponsored — no ETH needed in the account):
+### 4. Check wallet configuration
 
 ```bash
-keypo-wallet send \
-  --key my-key \
-  --to 0xRecipientAddress \
-  --value 0 \
-  --data 0xCalldata \
-  --bundler "https://api.pimlico.io/v2/84532/rpc?apikey=YOUR_API_KEY" \
-  --paymaster "https://api.pimlico.io/v2/84532/rpc?apikey=YOUR_API_KEY" \
-  --rpc https://sepolia.base.org
+keypo-wallet wallet-info --key my-key
 ```
 
-### 5. Send a batch of calls
+Shows wallet address, key policy, P-256 public key, chain deployments and live ETH balance per chain.
 
-Create a JSON file with the calls:
-
-```json
-[
-  {"to": "0xAddr1", "value": "0x0", "data": "0x"},
-  {"to": "0xAddr2", "value": "0x38d7ea4c68000", "data": "0x1234"}
-]
-```
+Grabbing live ETH balance requires an RPC call, so the command could take a few seconds to complete. If you want faster info without getting live on-chain data, you can run:
 
 ```bash
-keypo-wallet batch --key my-key --calls calls.json \
-  --bundler "https://..." --rpc https://sepolia.base.org
-```
-
-### 6. Check your account
-
-```bash
-# View account info (reads local state, no RPC needed)
 keypo-wallet info --key my-key
-
-# Check ETH balance
-keypo-wallet balance --key my-key --rpc https://sepolia.base.org
-
-# Check an ERC-20 token balance
-keypo-wallet balance --key my-key --token 0xTokenContractAddress \
-  --rpc https://sepolia.base.org
 ```
+
+Gives you everything that wallet-info gives (wallet address, key policy, P-256 public key and chain deployments) except live ETH balance per chain. 
+
+You can also run:
+```bash
+keypo-wallet balance --key my-key        # ETH balance
+keypo-wallet balance --key my-key --token 0xTokenContractAddress  # ERC-20 balance
+```
+
+### 5. Send a transaction
+
+```bash
+# Send 0.001 ETH (value is in wei)
+keypo-wallet send --key my-key --to 0xRecipientAddress --value 1000000000000000
+```
+
+If `paymaster_url` is set in your config, transactions are gas-sponsored automatically — the paymaster pays for gas so your wallet doesn't need ETH for fees. To explicitly skip the paymaster and pay gas from your wallet's ETH balance, add `--no-paymaster`.
 
 ## CLI Commands
 
 | Command | Description |
 |---|---|
+| **Config** | |
+| `init` | Initialize `~/.keypo/config.toml` with RPC/bundler/paymaster URLs |
+| `config set` | Set a config value (e.g. `config set network.rpc_url https://...`) |
+| `config show` | Print current config |
+| `config edit` | Open config file in `$EDITOR` |
+| **Key management** (via keypo-signer) | |
+| `create` | Create a new P-256 signing key in the Secure Enclave |
+| `list` | List all signing keys |
+| `key-info` | Show details for a specific key |
+| `sign` | Sign a 32-byte hex digest |
+| `verify` | Verify a P-256 signature |
+| `delete` | Delete a signing key |
+| **Wallet operations** | |
 | `setup` | Set up a smart account — EIP-7702 delegation + P-256 key registration |
 | `send` | Send a single transaction via the ERC-4337 bundler |
 | `batch` | Send multiple calls atomically via ERC-7821 batch mode |
+| `wallet-list` | List all wallet accounts with optional live balances |
+| `wallet-info` | Show account details + on-chain status |
 | `info` | Show account info from local state (no RPC) |
 | `balance` | Query native ETH and ERC-20 token balances |
 
@@ -214,34 +201,37 @@ The `balance` command accepts `--query <file.json>` for structured queries:
 
 ## Environment
 
-Create a `.env` file at the repo root (gitignored — never commit it):
+### Config file (preferred)
 
-```bash
-cp .env.example .env
-# Then fill in your values
+The CLI reads endpoints from `~/.keypo/config.toml`, created by `keypo-wallet init`:
+
+```toml
+[network]
+rpc_url = "https://sepolia.base.org"
+bundler_url = "https://api.pimlico.io/v2/84532/rpc?apikey=..."
+paymaster_url = "https://api.pimlico.io/v2/84532/rpc?apikey=..."
+paymaster_policy_id = "sp_clever_unus"
 ```
 
-| Variable | Used by | Description |
-|---|---|---|
-| `PIMLICO_API_KEY` | CLI (via `--bundler` URL) | Pimlico bundler API key — used to construct the bundler URL passed to `--bundler` |
-| `BASE_SEPOLIA_RPC_URL` | CLI (`--rpc`, `--bundler`) | Base Sepolia RPC/bundler endpoint |
-| `PAYMASTER_URL` | CLI (`--paymaster`) | ERC-7677 paymaster endpoint for gas sponsorship |
-| `PIMLICO_SPONSORSHIP_POLICY_ID` | CLI (`--paymaster-policy`) | Optional paymaster sponsorship policy ID |
-| `TEST_FUNDER_PRIVATE_KEY` | CLI (`setup`) | If set, `setup` auto-funds the new account from this key instead of waiting for manual funding |
-| `DEPLOYER_PRIVATE_KEY` | Foundry scripts | Private key for contract deployments (not used by the CLI) |
-| `BASESCAN_API_KEY` | Foundry verify | Basescan API key for contract verification (not used by the CLI) |
+### Resolution precedence
 
-The CLI reads URLs and keys from **command-line flags** (`--rpc`, `--bundler`, `--paymaster`, `--paymaster-policy`), not directly from `.env`. The `.env` file is a convenient place to store these values — you can source it or reference the variables in your shell:
+The CLI resolves each URL/setting with a 4-tier precedence:
 
-```bash
-# Source .env and use variables in CLI flags
-source .env
-keypo-wallet send --key my-key --to 0x... --value 0 \
-  --bundler "$BASE_SEPOLIA_RPC_URL" \
-  --paymaster "$PAYMASTER_URL" \
-  --rpc https://sepolia.base.org
-```
+1. **CLI flag** (`--rpc`, `--bundler`, `--paymaster`, `--paymaster-policy`)
+2. **Environment variable** (`KEYPO_RPC_URL`, `KEYPO_BUNDLER_URL`, `KEYPO_PAYMASTER_URL`, `KEYPO_PAYMASTER_POLICY_ID`)
+3. **Config file** (`~/.keypo/config.toml`)
+4. **Error** (if none of the above provide a value)
 
-The one exception is `TEST_FUNDER_PRIVATE_KEY` — the `setup` command reads this directly from the environment. If set, it auto-funds the new account; otherwise, `setup` waits for you to manually send ETH to the account address.
+### Environment variables
 
-Foundry (`keypo-account/`) auto-loads `.env` from its working directory via a symlink (`keypo-account/.env` → `../.env`).
+| Variable | Description |
+|---|---|
+| `KEYPO_RPC_URL` | Standard RPC endpoint |
+| `KEYPO_BUNDLER_URL` | ERC-4337 bundler endpoint |
+| `KEYPO_PAYMASTER_URL` | ERC-7677 paymaster endpoint |
+| `KEYPO_PAYMASTER_POLICY_ID` | Paymaster sponsorship policy ID |
+| `TEST_FUNDER_PRIVATE_KEY` | If set, `setup` auto-funds the new account (read directly from env) |
+
+### `.env` file (Foundry / integration tests)
+
+The `.env` file at the repo root is used by Foundry and integration tests, not by the CLI directly. Variables like `PIMLICO_API_KEY`, `BASE_SEPOLIA_RPC_URL`, `DEPLOYER_PRIVATE_KEY`, and `BASESCAN_API_KEY` live there. Foundry auto-loads `.env` via a symlink (`keypo-account/.env` -> `../.env`).
