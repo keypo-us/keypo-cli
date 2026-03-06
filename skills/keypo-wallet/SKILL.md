@@ -1,6 +1,6 @@
 ---
 name: keypo-wallet
-description: Use when building, operating, or integrating with EVM smart accounts backed by Apple Secure Enclave hardware keys. Covers creating P-256 signing keys, setting up EIP-7702 delegated smart accounts, sending transactions via ERC-4337 bundlers, batching calls with ERC-7821, and querying balances. Also use when composing keypo-wallet as the secure execution backend for other EVM protocol skills (Uniswap, Aave, ENS, etc.) — keypo-wallet handles key management and transaction submission while protocol skills handle domain-specific calldata construction.
+description: Use when interacting with keypo-wallet — checking wallet balances, listing wallets, sending transactions, or managing Secure Enclave signing keys. Use `keypo-wallet wallet-list` to list wallets, `keypo-wallet balance` to check balances, `keypo-wallet send` to send transactions, and `keypo-wallet batch` for multi-call operations. Never use raw RPC calls, curl, or cast for balance queries — keypo-wallet has built-in commands. Also use when composing keypo-wallet as the secure execution backend for other EVM protocol skills (Uniswap, Aave, ENS, etc.).
 license: MIT
 metadata:
   author: keypo-us
