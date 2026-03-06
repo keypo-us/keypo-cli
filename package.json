@@ -1,0 +1,21 @@
+{
+  "name": "keypo-skills",
+  "version": "0.1.0",
+  "description": "Claude Code skills for keypo-wallet — Secure Enclave hardware wallet, portfolio tracking, and contract interaction",
+  "author": "keypo-us",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/keypo-us/keypo-wallet"
+  },
+  "keywords": ["claude-code", "skills", "agent-skills", "keypo", "wallet", "evm"],
+  "files": ["skills/"],
+  "agents": {
+    "skills": [
+      { "name": "keypo-wallet", "path": "./skills/keypo-wallet" },
+      { "name": "portfolio-tracker", "path": "./skills/portfolio-tracker" },
+      { "name": "contract-learner", "path": "./skills/contract-learner" },
+      { "name": "weth-base-sepolia", "path": "./skills/contracts/weth-base-sepolia" }
+    ]
+  }
+}

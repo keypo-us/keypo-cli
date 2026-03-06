@@ -12,6 +12,7 @@ A CLI that turns a Mac into a programmable hardware wallet using Secure Enclave 
 | `homebrew/` | Homebrew tap formula |
 | `deployments/` | Per-chain deployment records (JSON) |
 | `tests/` | Integration tests + WebAuthn test frontend |
+| `skills/` | Claude Code agent skills (npm: keypo-skills) |
 | `.github/workflows/` | CI: rust.yml, swift.yml, foundry.yml, release.yml |
 
 ## Build / Test / Lint

@@ -16,6 +16,7 @@ A CLI that turns your Mac into a programmable hardware wallet. Key features:
 | `keypo-signer-cli/` | Swift CLI — Secure Enclave P-256 key management (macOS) |
 | `homebrew/` | Homebrew tap formula for keypo-signer |
 | `deployments/` | Per-chain deployment records (JSON) |
+| `skills/` | Claude Code agent skills (npm: `keypo-skills`) |
 | `docs/` | Architecture, conventions, ADRs, setup, deployment -- see [CLAUDE.md](CLAUDE.md) for full index |
 
 ## Prerequisites
@@ -179,6 +180,23 @@ The `--test-threads=1` flag prevents funder wallet nonce conflicts.
 | Base Sepolia (84532) | KeypoAccount | [`0x6d1566f9aAcf9c06969D7BF846FA090703A38E43`](https://sepolia.basescan.org/address/0x6d1566f9aacf9c06969d7bf846fa090703a38e43) |
 
 The address is deterministic (CREATE2) and identical across all chains.
+
+## Skills
+
+This repo includes [Claude Code skills](https://github.com/vercel-labs/skills) that teach AI agents how to use keypo-wallet. Install all skills with:
+
+```bash
+npx skills add keypo-skills
+```
+
+| Skill | Description |
+|---|---|
+| `keypo-wallet` | Core wallet operations — setup, send, batch, balance queries |
+| `portfolio-tracker` | Discover all ERC-20 token balances via Alchemy Portfolio API |
+| `contract-learner` | Generate a SKILL.md for any verified smart contract |
+| `weth-base-sepolia` | Example generated skill — interact with WETH on Base Sepolia |
+
+Generated contract skills live in `skills/contracts/`. Use the `contract-learner` skill to create new ones from any verified contract address.
 
 ## Balance Query Files
 

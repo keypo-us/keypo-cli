@@ -1,0 +1,9 @@
+# Include only skills and package metadata
+*
+
+# Whitelist
+!skills/
+!skills/**
+!package.json
+!README.md
+!LICENSE
