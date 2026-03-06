@@ -85,7 +85,7 @@ Shows wallet address, key policy, P-256 public key, chain deployments, and live 
 
 ---
 
-## Transaction Commands
+## Sending Transactions
 
 ### Send a single transaction
 
@@ -120,6 +120,27 @@ keypo-wallet batch --key <key-name> --calls calls.json
 The call object format is `{ "to": "0x...", "value": "0", "data": "0x..." }`. All calls execute atomically in a single UserOperation. Use batch for multi-step DeFi operations (approve + swap, supply + borrow, etc.).
 
 **Agents: always prefer `--calls -` with stdin.** This avoids temp file creation and cleanup. Construct the JSON array in memory and pipe it directly.
+
+---
+
+## Querying Wallet State
+
+**Always use these commands to check wallets and balances. Do not make raw RPC calls or use curl/cast to query balances — keypo-wallet has built-in commands for this.**
+
+### List all wallets
+
+```bash
+keypo-wallet wallet-list                    # all wallets with live balances
+```
+
+This is the fastest way to see every wallet at once — addresses, key policies, chain deployments, and current ETH balances in a single command.
+
+### Get details for a specific wallet
+
+```bash
+keypo-wallet wallet-info --key <key-name>   # full details + live on-chain balance
+keypo-wallet info --key <key-name>          # same details, no RPC call (faster)
+```
 
 ### Query balances
 
@@ -196,14 +217,18 @@ keypo-wallet send \
 
 ### Example: Read-only queries
 
-For read-only calls (balanceOf, getReserves, etc.), do NOT use keypo-wallet. Use the RPC directly with `cast` (Foundry) or `curl`:
+For balance checks, always use keypo-wallet's built-in commands:
 
 ```bash
-# Check ERC-20 balance using cast
-cast call <token-address> "balanceOf(address)(uint256)" <wallet-address> --rpc-url https://sepolia.base.org
+keypo-wallet wallet-list                                           # all wallets + balances
+keypo-wallet balance --key agent-wallet                            # ETH balance for one wallet
+keypo-wallet balance --key agent-wallet --token <token-address>    # ERC-20 balance
+```
 
-# Or use keypo-wallet's built-in balance query
-keypo-wallet balance --key agent-wallet --token <token-address>
+For other read-only contract calls (getReserves, totalSupply, etc.) that keypo-wallet doesn't cover, use `cast` (Foundry):
+
+```bash
+cast call <contract-address> "functionSignature(args)(returnType)" <args> --rpc-url https://sepolia.base.org
 ```
 
 ### Compatible skill ecosystems
