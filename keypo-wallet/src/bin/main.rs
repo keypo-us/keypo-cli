@@ -143,13 +143,13 @@ enum Commands {
     /// Send a batch of calls
     #[command(long_about = "Send a batch of calls in a single UserOp.\n\n\
             Reads a JSON file containing an array of {to, value, data} objects and executes \
-            them atomically via ERC-7821 batch mode.")]
+            them atomically via ERC-7821 batch mode. Pass '--calls -' to read from stdin.")]
     Batch {
         /// Key label for the signing key
         #[arg(long)]
         key: String,
 
-        /// Path to JSON file with calls
+        /// Path to JSON file with calls, or - for stdin
         #[arg(long)]
         calls: String,
 
@@ -940,9 +940,18 @@ async fn run_batch(
     let signer = KeypoSigner::new();
     let imp = load_deployments_impl();
 
-    // Read and parse calls JSON file
-    let calls_json = std::fs::read_to_string(&calls_path)
-        .map_err(|e| format!("failed to read calls file '{calls_path}': {e}"))?;
+    // Read and parse calls JSON — "-" means stdin
+    let calls_json = if calls_path == "-" {
+        use std::io::Read;
+        let mut buf = String::new();
+        std::io::stdin()
+            .read_to_string(&mut buf)
+            .map_err(|e| format!("failed to read calls from stdin: {e}"))?;
+        buf
+    } else {
+        std::fs::read_to_string(&calls_path)
+            .map_err(|e| format!("failed to read calls file '{calls_path}': {e}"))?
+    };
     let calls: Vec<Call> = serde_json::from_str(&calls_json)
         .map_err(|e| format!("failed to parse calls JSON: {e}"))?;
 

@@ -62,6 +62,11 @@ Create `test-batch.json`:
 cargo run -- batch --key test-manual \
   --calls test-batch.json \
   --bundler $BASE_SEPOLIA_RPC_URL --paymaster $PAYMASTER_URL
+
+# Or via stdin:
+cat test-batch.json | cargo run -- batch --key test-manual \
+  --calls - \
+  --bundler $BASE_SEPOLIA_RPC_URL --paymaster $PAYMASTER_URL
 ```
 
 - [ ] Batch transaction succeeds
