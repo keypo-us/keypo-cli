@@ -1,6 +1,6 @@
 import Foundation
 
-public let keypoVersion = "0.1.2"
+public let keypoVersion = "0.1.3"
 
 // MARK: - Key Policy
 

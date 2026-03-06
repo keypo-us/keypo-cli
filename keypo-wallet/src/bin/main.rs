@@ -331,10 +331,6 @@ enum Commands {
         #[arg(long)]
         format: Option<String>,
 
-        /// Show full addresses (no truncation)
-        #[arg(long)]
-        no_truncate: bool,
-
         /// Skip live balance queries
         #[arg(long)]
         no_balance: bool,
@@ -554,9 +550,8 @@ async fn main() {
         Commands::WalletList {
             rpc,
             format,
-            no_truncate,
             no_balance,
-        } => run_wallet_list(rpc, format, no_truncate, no_balance, &cfg).await,
+        } => run_wallet_list(rpc, format, no_balance, &cfg).await,
 
         Commands::WalletInfo { key, rpc, format } => run_wallet_info(key, rpc, format, &cfg).await,
     };
@@ -1136,7 +1131,6 @@ async fn run_balance(
 async fn run_wallet_list(
     rpc: Option<String>,
     format: Option<String>,
-    no_truncate: bool,
     no_balance: bool,
     cfg: &Option<config::Config>,
 ) -> std::result::Result<(), Box<dyn std::error::Error>> {
@@ -1205,7 +1199,7 @@ async fn run_wallet_list(
     let output = match fmt.as_str() {
         "json" => query::format_wallet_list_json(&entries),
         "csv" => query::format_wallet_list_csv(&entries),
-        _ => query::format_wallet_list_table(&entries, !no_truncate),
+        _ => query::format_wallet_list_table(&entries, false),
     };
     print!("{output}");
 
@@ -1687,19 +1681,16 @@ mod tests {
             "wallet-list",
             "--format",
             "json",
-            "--no-truncate",
             "--no-balance",
         ])
         .unwrap();
         match cli.command {
             Commands::WalletList {
                 format,
-                no_truncate,
                 no_balance,
                 ..
             } => {
                 assert_eq!(format, Some("json".into()));
-                assert!(no_truncate);
                 assert!(no_balance);
             }
             _ => panic!("expected WalletList"),
