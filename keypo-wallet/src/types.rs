@@ -75,6 +75,7 @@ pub struct AccountRecord {
 #[derive(Debug, Clone)]
 pub struct WalletListEntry {
     pub label: String,
+    pub policy: String,
     pub address: Address,
     pub chains: Vec<String>,
     pub eth_balance: Option<U256>,

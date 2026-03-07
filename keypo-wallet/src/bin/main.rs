@@ -449,24 +449,24 @@ OUTPUT (JSON):
     #[command(
         name = "wallet-list",
         long_about = "List all smart wallet accounts with optional live balances.\n\n\
-            Shows address, chains, and ETH balance for each account. Use --no-balance to \
-            skip RPC queries.",
+            Shows label, policy, address, chains, and ETH balance for each account. \
+            Defaults to JSON output. Use --no-balance to skip RPC queries.",
         after_long_help = "\
 EXAMPLES:
   keypo-wallet wallet-list
   keypo-wallet wallet-list --no-balance
-  keypo-wallet wallet-list --format json
+  keypo-wallet wallet-list --format table
   keypo-wallet wallet-list --format csv
 
-TABLE OUTPUT:
-  Label       Address                                      Chains  ETH Balance
-  my-wallet   0x1234567890abcdef1234567890abcdef12345678   84532   0.042
+JSON OUTPUT (default):
+  {\"wallets\": [{\"label\": \"my-wallet\", \"policy\": \"open\", \"address\": \"0x1234...abcd\", \"chains\": [84532], \"eth_balance\": \"0.042\"}]}
 
-JSON OUTPUT:
-  {\"wallets\": [{\"label\": \"my-wallet\", \"address\": \"0x1234...abcd\", \"chains\": [84532], \"eth_balance\": \"0.042\"}]}
+TABLE OUTPUT:
+  Label       Policy  Address                                      Chains  ETH Balance
+  my-wallet   open    0x1234567890abcdef1234567890abcdef12345678   84532   0.042
 
 CSV HEADER:
-  label,address,chains,eth_balance,eth_balance_raw"
+  label,policy,address,chains,eth_balance,eth_balance_raw"
     )]
     WalletList {
         /// RPC URL for balance queries
@@ -1353,13 +1353,14 @@ async fn run_wallet_list(
 
         entries.push(WalletListEntry {
             label: account.key_label.clone(),
+            policy: account.key_policy.clone(),
             address: account.address,
             chains: chain_names,
             eth_balance,
         });
     }
 
-    let fmt = format.unwrap_or_else(|| "table".to_string());
+    let fmt = format.unwrap_or_else(|| "json".to_string());
     let output = match fmt.as_str() {
         "json" => query::format_wallet_list_json(&entries),
         "csv" => query::format_wallet_list_csv(&entries),

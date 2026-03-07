@@ -450,16 +450,18 @@ pub fn format_wallet_list_table(entries: &[WalletListEntry], truncate: bool) -> 
     let addr_width = if truncate { 13 } else { 42 }; // 0x...1234 vs full address
 
     out.push_str(&format!(
-        "{:<12} {:<width$} {:<20} {}\n",
+        "{:<12} {:<10} {:<width$} {:<20} {}\n",
         "Label",
+        "Policy",
         addr_header,
         "Chains",
         "ETH Balance",
         width = addr_width
     ));
     out.push_str(&format!(
-        "{:<12} {:<width$} {:<20} {}\n",
+        "{:<12} {:<10} {:<width$} {:<20} {}\n",
         "-----",
+        "------",
         "-------",
         "------",
         "-----------",
@@ -478,8 +480,9 @@ pub fn format_wallet_list_table(entries: &[WalletListEntry], truncate: bool) -> 
             None => "(no RPC)".to_string(),
         };
         out.push_str(&format!(
-            "{:<12} {:<width$} {:<20} {}\n",
+            "{:<12} {:<10} {:<width$} {:<20} {}\n",
             entry.label,
+            entry.policy,
             addr_str,
             chains_str,
             balance_str,
@@ -498,6 +501,7 @@ pub fn format_wallet_list_json(entries: &[WalletListEntry]) -> String {
     #[derive(Serialize)]
     struct WalletJsonEntry {
         label: String,
+        policy: String,
         address: String,
         chains: Vec<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -510,6 +514,7 @@ pub fn format_wallet_list_json(entries: &[WalletListEntry]) -> String {
         .iter()
         .map(|e| WalletJsonEntry {
             label: e.label.clone(),
+            policy: e.policy.clone(),
             address: format!("{}", e.address),
             chains: e.chains.clone(),
             eth_balance: e.eth_balance.map(|b| format_balance(b, 18)),
@@ -521,7 +526,7 @@ pub fn format_wallet_list_json(entries: &[WalletListEntry]) -> String {
 }
 
 pub fn format_wallet_list_csv(entries: &[WalletListEntry]) -> String {
-    let mut out = String::from("label,address,chains,eth_balance,eth_balance_raw\n");
+    let mut out = String::from("label,policy,address,chains,eth_balance,eth_balance_raw\n");
     for e in entries {
         let chains = e.chains.join("; ");
         let balance = e
@@ -530,8 +535,8 @@ pub fn format_wallet_list_csv(entries: &[WalletListEntry]) -> String {
             .unwrap_or_default();
         let raw = e.eth_balance.map(|b| b.to_string()).unwrap_or_default();
         out.push_str(&format!(
-            "\"{}\",\"{}\",\"{}\",\"{}\",\"{}\"\n",
-            e.label, e.address, chains, balance, raw
+            "\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\"\n",
+            e.label, e.policy, e.address, chains, balance, raw
         ));
     }
     out
@@ -1174,6 +1179,7 @@ mod tests {
     fn test_wallet_entries() -> Vec<WalletListEntry> {
         vec![WalletListEntry {
             label: "my-key".into(),
+            policy: "open".into(),
             address: address!("0x9876543210987654321098765432109876545432"),
             chains: vec!["Base Sepolia".into()],
             eth_balance: Some(U256::from(1_000_000_000_000_000_000u64)),
@@ -1202,6 +1208,7 @@ mod tests {
     fn test_format_wallet_list_table_no_balance() {
         let entries = vec![WalletListEntry {
             label: "my-key".into(),
+            policy: "open".into(),
             address: address!("0x9876543210987654321098765432109876545432"),
             chains: vec!["Base Sepolia".into()],
             eth_balance: None,
@@ -1233,7 +1240,7 @@ mod tests {
         let entries = test_wallet_entries();
         let csv = format_wallet_list_csv(&entries);
         let lines: Vec<&str> = csv.lines().collect();
-        assert_eq!(lines[0], "label,address,chains,eth_balance,eth_balance_raw");
+        assert_eq!(lines[0], "label,policy,address,chains,eth_balance,eth_balance_raw");
         assert!(lines[1].contains("my-key"));
         assert!(lines[1].contains("Base Sepolia"));
     }
