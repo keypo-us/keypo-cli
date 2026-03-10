@@ -220,7 +220,20 @@ struct VaultExecCommand: ParsableCommand {
             throw ExitCode(127)
         }
 
+        // Swift's Process uses POSIX_SPAWN_SETPGROUP, placing the child in a
+        // new (background) process group. If stdin is a TTY, child workers that
+        // touch stdin receive SIGTTIN and silently suspend. Transfer foreground
+        // ownership so the child's process group can read from the terminal.
+        if isatty(STDIN_FILENO) != 0 {
+            tcsetpgrp(STDIN_FILENO, process.processIdentifier)
+        }
+
         process.waitUntilExit()
+
+        // Reclaim foreground process group for the parent before exiting.
+        if isatty(STDIN_FILENO) != 0 {
+            tcsetpgrp(STDIN_FILENO, getpgrp())
+        }
 
         // Zeroize decrypted values
         decryptedSecrets.removeAll()
