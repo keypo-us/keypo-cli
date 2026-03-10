@@ -5,7 +5,7 @@ class KeypoWallet < Formula
   license "MIT"
 
   url "https://github.com/keypo-us/keypo-wallet/releases/download/v#{version}/keypo-wallet-#{version}-macos-arm64.tar.gz"
-  sha256 "8164291082fe0f58dd2e4b4fcf459afa35d984cbe8913015aa6d838915cfe808"
+  sha256 "06de3466da9b048168e2fb1a17a93bec1e12dafe50312fc8861ab75326fe6821"
 
   depends_on macos: :sonoma
   depends_on arch: :arm64
