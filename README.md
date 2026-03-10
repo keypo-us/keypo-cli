@@ -13,7 +13,7 @@ A CLI that turns your Mac into a programmable hardware wallet. Key features:
 |---|---|
 | `keypo-account/` | Foundry project — Solidity smart account contract (ERC-4337 v0.7) |
 | `keypo-wallet/` | Rust crate + CLI — account setup, signing, bundler interaction |
-| `keypo-signer-cli/` | Swift CLI — Secure Enclave P-256 key management (macOS) |
+| `keypo-signer-cli/` | Swift CLI — Secure Enclave P-256 key management and encrypted secret storage (macOS) |
 | `homebrew/` | Homebrew tap formula for keypo-signer |
 | `deployments/` | Per-chain deployment records (JSON) |
 | `skills/` | Claude Code agent skills (npm: `keypo-skills`) |
@@ -129,6 +129,13 @@ If `paymaster_url` is set in your config, transactions are gas-sponsored automat
 | `wallet-info` | Show account details + on-chain status |
 | `info` | Show account info from local state (no RPC) |
 | `balance` | Query native ETH and ERC-20 token balances |
+| **Secret management** (delegates to [`keypo-signer vault`](keypo-signer-cli/)) | |
+| `vault init` | Create vault encryption keys backed by Secure Enclave |
+| `vault set` / `get` / `update` / `delete` | Store, retrieve, update, and delete encrypted secrets |
+| `vault list` | List all vaults and secret names |
+| `vault exec` | Run a command with secrets injected as environment variables |
+| `vault import` | Import secrets from a `.env` file |
+| `vault destroy` | Delete all vaults, keys, and secrets |
 
 Use `--help` on any command for detailed usage, e.g. `keypo-wallet setup --help`.
 

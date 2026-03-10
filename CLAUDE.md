@@ -8,7 +8,7 @@ A CLI that turns a Mac into a programmable hardware wallet using Secure Enclave 
 |---|---|
 | `keypo-account/` | Foundry -- Solidity smart account (ERC-4337 v0.7, P-256, ERC-7821) |
 | `keypo-wallet/` | Rust crate + CLI -- setup, signing, bundler, queries |
-| `keypo-signer-cli/` | Swift CLI -- Secure Enclave P-256 key management |
+| `keypo-signer-cli/` | Swift CLI -- Secure Enclave P-256 key management and encrypted secret storage |
 | `homebrew/` | Homebrew tap formula |
 | `deployments/` | Per-chain deployment records (JSON) |
 | `tests/` | Integration tests + WebAuthn test frontend |

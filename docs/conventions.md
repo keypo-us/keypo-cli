@@ -76,6 +76,16 @@ Standards and gotchas for all three languages in the monorepo. These are enforce
 - **Output routing**: Structured output to stdout, errors to stderr.
 - **Atomic file writes**: Write to temp file, then rename (for `~/.keypo/keys.json` metadata).
 
+### Vault Conventions
+
+- **Vault policy names**: `biometric`, `passcode`, `open` — same as signing keys. Vault keys use application tag `com.keypo.vault.<policy>`.
+- **ECIES encryption**: ECDH with ephemeral P-256 key + HKDF-SHA256 (salt: ephemeral public key raw bytes) + AES-256-GCM. HKDF info string: `"keypo-vault-v1" || secret_name`.
+- **HMAC integrity**: Key is `"keypo-vault-integrity-v1"`, computed over canonical JSON serialization of secrets dictionary using `.sortedKeys` output formatting. Verified before any mutation.
+- **LAContext sharing**: One LAContext per command invocation, passed to all VaultManager calls. Avoids multiple auth prompts per action.
+- **Secret name validation**: `^[A-Za-z_][A-Za-z0-9_]{0,127}$`. Different from signing key label validation (`^[a-z][a-z0-9-]{0,63}$`).
+- **Vault key type**: `SecureEnclave.P256.KeyAgreement.PrivateKey` (not Signing). Used for ECDH key agreement.
+- **Vault file**: `~/.keypo/vault.json`, permissions 600. Uses POSIX `flock` for concurrent access safety.
+
 ## Solidity (keypo-account)
 
 - **Override specifier**: `_rawSignatureValidation` uses `override(AbstractSigner, SignerP256)` -- NOT `override(Account, SignerP256)`.

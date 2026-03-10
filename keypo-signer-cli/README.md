@@ -47,6 +47,43 @@ keypo-signer sign 0x<hex-digest> --key my-key --format json
 
 All commands support `--format json` for machine-readable output.
 
+## Vault Commands
+
+Encrypted secret storage backed by the Secure Enclave. Secrets are encrypted with ECIES (ECDH + AES-256-GCM) using a Secure Enclave P-256 key agreement key, so they never exist in plaintext on disk.
+
+| Command | Description |
+|---|---|
+| `vault init` | Create vault encryption keys for all three policies (open, passcode, biometric) |
+| `vault set <name> --vault <policy>` | Store an encrypted secret |
+| `vault get <name>` | Decrypt and print a secret |
+| `vault update <name>` | Replace a secret's value |
+| `vault delete <name> --confirm` | Delete a secret (irreversible) |
+| `vault list` | List all vaults and their secret names (values are never shown) |
+| `vault exec <command> [args...]` | Run a command with secrets injected as environment variables |
+| `vault import --file <path> --vault <policy>` | Import secrets from a `.env` file |
+| `vault destroy --confirm` | Delete all vaults, keys, and secrets (irreversible) |
+
+### Vault Quick Start
+
+```bash
+# Initialize vault encryption keys
+keypo-signer vault init
+
+# Store a secret
+echo -n "sk_live_abc123" | keypo-signer vault set API_KEY --vault open
+
+# Retrieve it
+keypo-signer vault get API_KEY
+
+# Run a command with secrets as env vars
+keypo-signer vault exec -- env | grep API_KEY
+
+# Import from .env file
+keypo-signer vault import --file .env --vault open
+```
+
+`vault exec` is the primary agent-facing command — it injects secrets into a subprocess without exposing them on the command line. See [skills/vault/SKILL.md](../skills/vault/SKILL.md) for agent usage.
+
 ## Signing Policies
 
 | Policy | Flag | Behavior |

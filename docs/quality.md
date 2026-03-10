@@ -16,8 +16,8 @@ status: current
 | keypo-wallet (scaffolding) | 3 | `cargo test --test '*'` |
 | keypo-wallet (integration) | 10 (ignored in CI) | `cargo test -- --ignored --test-threads=1` |
 | keypo-account (Foundry) | 30 | `forge test` |
-| keypo-signer-cli (Swift) | See `swift test` | `swift test` |
-| **Total (non-ignored)** | **189 Rust + 30 Foundry** | |
+| keypo-signer-cli (Swift) | 94 | `swift test` |
+| **Total (non-ignored)** | **189 Rust + 30 Foundry + 94 Swift = 313** | |
 
 ## Integration Test Requirements
 
@@ -58,9 +58,20 @@ status: current
 - Balance queries against live RPC
 - Paymaster-sponsored transactions
 
+### Swift Tests (keypo-signer-cli)
+
+| Test Suite | Tests | Description |
+|---|---|---|
+| SignatureFormatterTests | 21 | DER parsing, low-S normalization, r/s extraction |
+| VaultManagerTests | 22 | ECIES encrypt/decrypt, HMAC integrity, key lifecycle |
+| VaultStoreTests | 14 | Vault file I/O, secret lookup, file locking, atomic writes |
+| VaultIntegrationTests | 22 | End-to-end vault workflows (init → set → get → update → delete → destroy) |
+| EnvFileParserTests | 15 | .env parsing: quotes, comments, export prefix, BOM, dedup |
+| **Total** | **94** | |
+
 ## Known Gaps
 
 - No code coverage measurement configured (consider `cargo-tarpaulin` or `cargo-llvm-cov`)
-- Swift test count not tracked automatically
+- ~~Swift test count not tracked automatically~~ (now tracked: 94 tests)
 - No fuzz testing for ABI encoding/decoding
 - WebAuthn frontend tests are manual only (`tests/webauthn-frontend/`)

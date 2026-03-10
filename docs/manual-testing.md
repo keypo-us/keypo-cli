@@ -364,6 +364,181 @@ cargo run -- --help
 
 ---
 
+## 7. Vault Commands
+
+Requires `keypo-signer` with vault support. All vault commands are subcommands of `keypo-signer vault`.
+
+### 7.1 Init + Set + Get
+
+```bash
+keypo-signer vault init
+echo -n "test-secret-value" | keypo-signer vault set MY_SECRET --vault open
+keypo-signer vault get MY_SECRET
+keypo-signer vault get MY_SECRET --format json
+```
+
+- [ ] `vault init` creates keys for all three policies (open, passcode, biometric)
+- [ ] `vault set` stores secret without error
+- [ ] `vault get` prints the decrypted value to stdout
+- [ ] `vault get --format json` returns `name`, `vault`, `value` fields
+
+### 7.2 Update
+
+```bash
+echo -n "updated-value" | keypo-signer vault update MY_SECRET
+keypo-signer vault get MY_SECRET
+```
+
+- [ ] `vault update` succeeds
+- [ ] `vault get` returns the updated value
+
+### 7.3 List
+
+```bash
+keypo-signer vault list
+keypo-signer vault list --format json
+```
+
+- [ ] Lists all vaults with secret names (no values shown)
+- [ ] JSON output includes `vaults` array with `policy`, `secrets`, `secretCount`
+
+### 7.4 Exec
+
+```bash
+keypo-signer vault exec -- env | grep MY_SECRET
+keypo-signer vault exec -- sh -c 'echo $MY_SECRET'
+```
+
+- [ ] Secret is available as environment variable in subprocess
+- [ ] Exit code matches child process exit code
+
+### 7.5 Import
+
+Create a test `.env` file:
+```bash
+echo 'IMPORT_KEY_1=value1
+IMPORT_KEY_2=value2' > /tmp/test-vault-import.env
+keypo-signer vault import --file /tmp/test-vault-import.env --vault open
+keypo-signer vault import --file /tmp/test-vault-import.env --vault open --format json
+```
+
+- [ ] First import succeeds, imports both keys
+- [ ] Second import skips both (already exist)
+- [ ] JSON output shows `imported` and `skipped` arrays with counts
+
+### 7.6 Delete
+
+```bash
+keypo-signer vault delete MY_SECRET --confirm
+keypo-signer vault get MY_SECRET
+```
+
+- [ ] Delete succeeds
+- [ ] Subsequent get returns exit code 2 (not found)
+
+### 7.7 Destroy
+
+```bash
+keypo-signer vault destroy --confirm
+keypo-signer vault list
+```
+
+- [ ] Destroy succeeds, reports vaults destroyed and secrets deleted
+- [ ] Subsequent list returns exit code 1 (not initialized)
+
+### 7.8 Biometric + Passcode Policies
+
+```bash
+keypo-signer vault init
+echo -n "bio-secret" | keypo-signer vault set BIO_KEY --vault biometric
+keypo-signer vault get BIO_KEY
+echo -n "pass-secret" | keypo-signer vault set PASS_KEY --vault passcode
+keypo-signer vault get PASS_KEY
+```
+
+- [ ] Touch ID prompt appears for biometric vault set/get
+- [ ] Passcode prompt appears for passcode vault set/get
+- [ ] Cancelling auth returns appropriate exit code (see exit code table)
+
+---
+
+## 8. Vault Error Flows
+
+### 8.1 Pre-Init Errors
+
+```bash
+keypo-signer vault destroy --confirm 2>/dev/null  # ensure clean state
+keypo-signer vault set FAIL --vault open <<< "value"
+keypo-signer vault get FAIL
+keypo-signer vault list
+```
+
+- [ ] `vault set` exits 1 (not initialized)
+- [ ] `vault get` exits 1 (not initialized)
+- [ ] `vault list` exits 1 (not initialized)
+
+### 8.2 Duplicate Secret
+
+```bash
+keypo-signer vault init
+echo -n "val" | keypo-signer vault set DUPE --vault open
+echo -n "val2" | keypo-signer vault set DUPE --vault open
+```
+
+- [ ] Second set exits 3 (already exists)
+- [ ] Error message names the duplicate secret
+
+### 8.3 Not Found
+
+```bash
+keypo-signer vault get NONEXISTENT
+keypo-signer vault update NONEXISTENT <<< "val"
+keypo-signer vault delete NONEXISTENT --confirm
+```
+
+- [ ] All exit code 2 (not found)
+
+### 8.4 Invalid Secret Names
+
+```bash
+echo -n "val" | keypo-signer vault set "123bad" --vault open
+echo -n "val" | keypo-signer vault set "" --vault open
+echo -n "val" | keypo-signer vault set "has spaces" --vault open
+```
+
+- [ ] All exit code 2 (invalid name)
+- [ ] Error message explains valid name format
+
+### 8.5 Empty Value
+
+```bash
+echo -n "" | keypo-signer vault set EMPTY --vault open
+```
+
+- [ ] Exits 5 (empty value)
+
+### 8.6 Missing --confirm
+
+```bash
+keypo-signer vault delete MY_SECRET
+keypo-signer vault destroy
+```
+
+- [ ] `vault delete` exits 3 (--confirm missing)
+- [ ] `vault destroy` exits 2 (--confirm missing)
+
+### 8.7 Authentication Cancellation
+
+```bash
+# Test with biometric vault — cancel Touch ID when prompted
+echo -n "val" | keypo-signer vault set CANCEL_TEST --vault biometric
+# Cancel Touch ID prompt
+```
+
+- [ ] Exits with auth cancelled exit code (4 for most commands, 7 for set, 128 for exec)
+
+---
+
 ## Cleanup
 
 ```bash
@@ -371,4 +546,6 @@ rm -f ~/.keypo/config.toml
 # Optionally delete test keys:
 keypo-signer delete --label test-manual --confirm
 keypo-signer delete --label unified-test --confirm
+# Clean up vault state:
+keypo-signer vault destroy --confirm
 ```

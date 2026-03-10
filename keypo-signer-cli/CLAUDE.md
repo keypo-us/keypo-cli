@@ -9,7 +9,7 @@ status: current
 
 ## Project Overview
 
-keypo-signer is a macOS CLI tool that manages P-256 signing keys inside the Apple Secure Enclave. It creates keys, signs data, rotates keys, and deletes keys. It outputs JSON by default. It is deliberately minimal — it signs bytes and returns signatures, nothing else.
+keypo-signer is a macOS CLI tool that manages P-256 signing keys and encrypted secrets inside the Apple Secure Enclave. It creates keys, signs data, rotates keys, deletes keys, and provides encrypted secret storage (vault). It outputs JSON by default.
 
 The full specification is in `../docs/archive/specs/keypo-signer-spec.md`. That document is the source of truth for all behavior, output formats, exit codes, and test cases. Read it before making changes.
 
@@ -31,14 +31,33 @@ keypo-signer/
 ├── README.md
 ├── Sources/
 │   ├── keypo-signer/          # Executable target — CLI entry point
-│   │   └── main.swift         # Argument parsing, command routing, output formatting
+│   │   ├── main.swift         # Argument parsing, command routing, output formatting
+│   │   ├── CreateCommand.swift, DeleteCommand.swift, ...  # Signing key commands
+│   │   ├── VaultCommand.swift          # Parent vault command (subcommand routing)
+│   │   ├── VaultInitCommand.swift      # vault init
+│   │   ├── VaultSetCommand.swift       # vault set
+│   │   ├── VaultGetCommand.swift       # vault get
+│   │   ├── VaultUpdateCommand.swift    # vault update
+│   │   ├── VaultDeleteCommand.swift    # vault delete
+│   │   ├── VaultListCommand.swift      # vault list
+│   │   ├── VaultExecCommand.swift      # vault exec
+│   │   ├── VaultImportCommand.swift    # vault import
+│   │   └── VaultDestroyCommand.swift   # vault destroy
 │   └── KeypoCore/             # Library target — all SE and key management logic
-│       ├── SecureEnclaveManager.swift   # SE key operations (create, sign, delete)
+│       ├── SecureEnclaveManager.swift   # SE signing key operations (create, sign, delete)
 │       ├── KeyMetadataStore.swift       # ~/.keypo/keys.json read/write
 │       ├── SignatureFormatter.swift     # DER parsing, r/s extraction, low-S normalization
-│       └── Models.swift                 # Codable structs for metadata and JSON output
+│       ├── Models.swift                 # Codable structs for metadata and JSON output
+│       ├── VaultManager.swift           # ECIES encryption/decryption, HMAC integrity, SE key lifecycle
+│       ├── VaultStore.swift             # ~/.keypo/vault.json read/write, secret lookup
+│       └── EnvFileParser.swift          # .env file parsing for vault import/exec
 └── Tests/
     └── KeypoCoreTests/
+        ├── SignatureFormatterTests.swift
+        ├── VaultManagerTests.swift
+        ├── VaultStoreTests.swift
+        ├── VaultIntegrationTests.swift
+        └── EnvFileParserTests.swift
 ```
 
 ## Build Commands
@@ -73,6 +92,14 @@ swift test
 
 7. **Application tags follow the pattern `com.keypo.signer.<label>`.** This is how we look up SE keys in the Keychain.
 
+8. **Vault: VaultManager handles crypto, VaultStore handles persistence, commands are thin wrappers.** `VaultManager` owns ECIES encryption/decryption (ECDH + HKDF-SHA256 + AES-256-GCM), HMAC integrity computation, and SE key agreement key lifecycle. `VaultStore` owns `~/.keypo/vault.json` read/write, file locking, and secret lookup across vaults. Vault command files in `keypo-signer/` are thin wrappers that parse arguments, call VaultManager/VaultStore, and format output.
+
+9. **Vault LAContext sharing.** One `LAContext` per command invocation, passed to all `VaultManager` calls within that command. This avoids multiple Touch ID / passcode prompts for a single user action.
+
+10. **Vault HMAC integrity verification before mutation.** Any command that mutates vault state (set, update, delete, import, destroy) MUST verify the HMAC integrity envelope before making changes. This prevents silent corruption propagation.
+
+11. **Vault atomic writes.** All vault file writes go through `VaultStore`, which writes to a temp file then renames (same pattern as `KeyMetadataStore`).
+
 ## Coding Conventions
 
 - Use Foundation's `JSONEncoder` / `JSONDecoder` for all JSON. Set `outputFormatting` to `[.prettyPrinted, .sortedKeys]` for JSON output mode.
@@ -94,6 +121,8 @@ swift test
 - **`.biometryCurrentSet` invalidates the key if biometrics change.** If a user re-enrolls their fingerprint, biometric-policy keys become permanently inaccessible. This is intentional Apple behavior.
 - **Concurrent metadata writes.** Multiple signing processes can run in parallel. The metadata file (signing counters) needs atomic write handling — write to a temp file, then rename.
 - **SE key lookup.** Use `SecItemCopyMatching` with `kSecAttrApplicationTag` set to `com.keypo.signer.<label>` to find keys. Set `kSecAttrTokenID` to `kSecAttrTokenIDSecureEnclave` to ensure we only match SE keys.
+- **Vault uses KeyAgreement keys, not Signing keys.** Vault encryption uses `SecureEnclave.P256.KeyAgreement.PrivateKey` (for ECDH), NOT `SecureEnclave.P256.Signing.PrivateKey`. These are different key types with different Keychain application tags (`com.keypo.vault.<policy>` vs `com.keypo.signer.<label>`).
+- **ECDH authentication cancellation detection.** LAContext cancellation during ECDH throws errors that need both code `-2` check AND string-based fallback detection (the error domain varies across macOS versions).
 
 ## Testing
 
