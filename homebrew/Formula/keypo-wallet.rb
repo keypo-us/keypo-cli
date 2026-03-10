@@ -1,7 +1,7 @@
 class KeypoWallet < Formula
   desc "ERC-4337 smart wallet CLI with Secure Enclave P-256 signing"
   homepage "https://github.com/keypo-us/keypo-wallet"
-  version "0.1.5"
+  version "0.1.6"
   license "MIT"
 
   url "https://github.com/keypo-us/keypo-wallet/releases/download/v#{version}/keypo-wallet-#{version}-macos-arm64.tar.gz"
@@ -17,6 +17,9 @@ class KeypoWallet < Formula
 
   def caveats
     <<~EOS
+      If you previously installed keypo-signer standalone, uninstall it first:
+        brew uninstall keypo-signer
+
       keypo-wallet requires Apple Silicon (M1 or later).
       macOS 14 (Sonoma) or later is required.
 

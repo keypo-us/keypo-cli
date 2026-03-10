@@ -41,6 +41,9 @@ You'll need the following set up before installing the CLI:
 # Via Homebrew (installs both keypo-wallet and keypo-signer)
 brew install keypo-us/tap/keypo-wallet
 
+# Upgrading from keypo-signer? Uninstall it first — keypo-wallet bundles both binaries.
+# brew uninstall keypo-signer
+
 # Or build from source
 git clone https://github.com/keypo-us/keypo-wallet.git
 cd keypo-wallet/keypo-wallet && cargo install --path .

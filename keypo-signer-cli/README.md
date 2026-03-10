@@ -13,6 +13,9 @@ A macOS CLI that manages P-256 signing keys inside the Apple Secure Enclave. It 
 brew install keypo-us/tap/keypo-signer
 ```
 
+> **Switching to keypo-wallet?** Run `brew uninstall keypo-signer` first,
+> then `brew install keypo-us/tap/keypo-wallet`.
+
 Requires Apple Silicon (M1+) and macOS 14+.
 
 If you have `keypo-wallet` installed, `keypo-signer` is already bundled — no separate install needed.
