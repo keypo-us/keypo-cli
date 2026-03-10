@@ -1,0 +1,223 @@
+import ArgumentParser
+import Foundation
+import KeypoCore
+import CryptoKit
+import LocalAuthentication
+
+struct VaultExecCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "exec",
+        abstract: "Decrypt secrets and inject them into a child process"
+    )
+
+    @OptionGroup var globals: GlobalOptions
+
+    @Option(name: .long, help: "Comma-separated secret names or * for all")
+    var allow: String?
+
+    @Option(name: .long, help: "Path to .env file for key name extraction")
+    var env: String?
+
+    @Argument(parsing: .captureForPassthrough)
+    var command: [String] = []
+
+    mutating func run() throws {
+        // Validate at least one source of secret names
+        guard allow != nil || env != nil else {
+            writeStderr("at least one of --allow or --env is required")
+            throw ExitCode(126)
+        }
+
+        guard !command.isEmpty else {
+            writeStderr("no command specified after --")
+            throw ExitCode(126)
+        }
+
+        let store = makeVaultStore(globals)
+
+        guard store.vaultExists() else {
+            writeStderr("vault not initialized")
+            throw ExitCode(126)
+        }
+
+        // Resolve secret names
+        var secretNames = Set<String>()
+
+        if let allowList = allow {
+            if allowList == "*" {
+                // All secrets across all vaults
+                do {
+                    let all = try store.allSecretNames()
+                    for entry in all {
+                        secretNames.insert(entry.name)
+                    }
+                } catch {
+                    writeStderr("failed to enumerate secrets: \(error)")
+                    throw ExitCode(126)
+                }
+            } else {
+                for name in allowList.split(separator: ",") {
+                    secretNames.insert(name.trimmingCharacters(in: .whitespaces))
+                }
+            }
+        }
+
+        if let envPath = env {
+            do {
+                let keys = try EnvFileParser.parseKeyNames(from: envPath)
+                for key in keys {
+                    secretNames.insert(key)
+                }
+            } catch {
+                writeStderr("failed to parse .env file: \(error)")
+                throw ExitCode(126)
+            }
+        }
+
+        guard !secretNames.isEmpty else {
+            writeStderr("no secrets to inject")
+            throw ExitCode(126)
+        }
+
+        // Look up which vault each secret belongs to (JSON only, no SE key)
+        var vaultFile: VaultFile
+        do {
+            vaultFile = try store.loadVaultFile()
+        } catch {
+            writeStderr("failed to load vault: \(error)")
+            throw ExitCode(126)
+        }
+
+        // Group secrets by vault
+        var secretsByVault: [String: [String]] = [:]  // policy name -> [secret names]
+        for name in secretNames {
+            var foundPolicy: String?
+            for policyName in ["biometric", "passcode", "open"] {
+                if let entry = vaultFile.vaults[policyName], entry.secrets[name] != nil {
+                    foundPolicy = policyName
+                    break
+                }
+            }
+            guard let policy = foundPolicy else {
+                writeStderr("secret '\(name)' not found in any vault")
+                throw ExitCode(126)
+            }
+            secretsByVault[policy, default: []].append(name)
+        }
+
+        // Print summary to stderr
+        let commandStr = command.joined(separator: " ")
+        writeStderrRaw("keypo-vault: decrypting \(secretNames.count) secret(s) for: \(commandStr)")
+        for policyName in ["open", "passcode", "biometric"] {
+            guard let names = secretsByVault[policyName] else { continue }
+            writeStderrRaw("  [\(policyName)] \(names.sorted().joined(separator: ", "))")
+        }
+
+        // Decrypt secrets, loading vaults in order: open, passcode, biometric
+        let manager = VaultManager()
+        var decryptedSecrets: [String: String] = [:]
+
+        for policyName in ["open", "passcode", "biometric"] {
+            guard let names = secretsByVault[policyName] else { continue }
+            guard let entry = vaultFile.vaults[policyName] else { continue }
+
+            guard let dataRep = Data(base64Encoded: entry.dataRepresentation) else {
+                writeStderr("corrupt vault key reference for \(policyName)")
+                throw ExitCode(126)
+            }
+
+            // Set up LAContext with command description for biometric/passcode
+            var authContext: LAContext? = nil
+            if policyName == "biometric" || policyName == "passcode" {
+                let context = LAContext()
+                var reason = "keypo-vault: decrypt secrets for: \(commandStr)"
+                if reason.count > 150 {
+                    reason = String(reason.prefix(147)) + "..."
+                }
+                context.localizedReason = reason
+                authContext = context
+            }
+
+            // Verify HMAC
+            do {
+                let integrityKey = try SignatureFormatter.parseHex(entry.integrityEphemeralPublicKey)
+                guard let expectedHMAC = Data(base64Encoded: entry.integrityHmac) else {
+                    writeStderr("corrupt HMAC for \(policyName) vault")
+                    throw ExitCode(126)
+                }
+                let secretDataMap = try buildSecretDataMap(from: entry.secrets)
+                let valid = try manager.verifyHMAC(
+                    secrets: secretDataMap,
+                    seKeyDataRepresentation: dataRep,
+                    integrityEphemeralPublicKey: integrityKey,
+                    expectedHMAC: expectedHMAC,
+                    authContext: authContext
+                )
+                guard valid else {
+                    writeStderr("vault integrity check failed for \(policyName)")
+                    throw ExitCode(126)
+                }
+            } catch let e as VaultError where e.description.contains("cancelled") {
+                writeStderr("authentication cancelled")
+                throw ExitCode(128)
+            } catch let e as VaultError {
+                writeStderr("\(e)")
+                throw ExitCode(126)
+            }
+
+            // Decrypt each secret in this vault
+            for name in names {
+                guard let secret = entry.secrets[name] else { continue }
+                do {
+                    let encData = try secret.toEncryptedSecretData()
+                    let plaintext = try manager.decrypt(
+                        encryptedData: encData,
+                        secretName: name,
+                        seKeyDataRepresentation: dataRep,
+                        authContext: authContext
+                    )
+                    guard let value = String(data: plaintext, encoding: .utf8) else {
+                        writeStderr("decrypted value for '\(name)' is not valid UTF-8")
+                        throw ExitCode(126)
+                    }
+                    decryptedSecrets[name] = value
+                } catch let e as VaultError where e.description.contains("cancelled") {
+                    writeStderr("authentication cancelled")
+                    throw ExitCode(128)
+                } catch {
+                    writeStderr("failed to decrypt '\(name)': \(error)")
+                    throw ExitCode(126)
+                }
+            }
+        }
+
+        writeStderrRaw("keypo-vault: secrets injected, running command...")
+
+        // Build child environment
+        var childEnv = ProcessInfo.processInfo.environment
+        for (name, value) in decryptedSecrets {
+            childEnv[name] = value
+        }
+
+        // Spawn child process
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = command
+        process.environment = childEnv
+
+        do {
+            try process.run()
+        } catch {
+            writeStderr("command not found: \(command.first ?? "")")
+            throw ExitCode(127)
+        }
+
+        process.waitUntilExit()
+
+        // Zeroize decrypted values
+        decryptedSecrets.removeAll()
+
+        // Forward child's exit code
+        throw ExitCode(process.terminationStatus)
+    }
+}

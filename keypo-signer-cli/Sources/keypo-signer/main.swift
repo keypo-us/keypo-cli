@@ -17,6 +17,7 @@ struct KeypoSigner: ParsableCommand {
             DeleteCommand.self,
             RotateCommand.self,
             VerifyCommand.self,
+            VaultCommand.self,
         ]
     )
 }
