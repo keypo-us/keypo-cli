@@ -199,10 +199,20 @@ struct VaultExecCommand: ParsableCommand {
             childEnv[name] = value
         }
 
+        // Coalesce sh -c / bash -c arguments into a single command string.
+        // swift-argument-parser tokenizes 'npm run build && npm run start' into
+        // separate strings, but sh -c expects a single command argument.
+        var execArgs = command
+        if execArgs.count > 2,
+           (execArgs[0] == "sh" || execArgs[0] == "bash" || execArgs[0] == "/bin/sh" || execArgs[0] == "/bin/bash"),
+           execArgs[1] == "-c" {
+            execArgs = [execArgs[0], "-c", execArgs[2...].joined(separator: " ")]
+        }
+
         // Spawn child process
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = command
+        process.arguments = execArgs
         process.environment = childEnv
 
         do {
