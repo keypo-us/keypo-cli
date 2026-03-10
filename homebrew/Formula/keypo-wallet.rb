@@ -1,11 +1,11 @@
 class KeypoWallet < Formula
   desc "ERC-4337 smart wallet CLI with Secure Enclave P-256 signing"
   homepage "https://github.com/keypo-us/keypo-wallet"
-  version "0.1.7"
+  version "0.1.8"
   license "MIT"
 
   url "https://github.com/keypo-us/keypo-wallet/releases/download/v#{version}/keypo-wallet-#{version}-macos-arm64.tar.gz"
-  sha256 "2cb8e055cacd635e1907e41d6b13fe293df4846d53667cd283e432f4c03d3dcc"
+  sha256 "8164291082fe0f58dd2e4b4fcf459afa35d984cbe8913015aa6d838915cfe808"
 
   depends_on macos: :sonoma
   depends_on arch: :arm64

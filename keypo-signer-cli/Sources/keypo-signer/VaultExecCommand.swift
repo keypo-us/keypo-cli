@@ -105,8 +105,9 @@ struct VaultExecCommand: ParsableCommand {
             secretsByVault[policy, default: []].append(name)
         }
 
-        // Print summary to stderr
-        let commandStr = command.joined(separator: " ")
+        // Print summary to stderr (strip -- from display)
+        let displayArgs = command.first == "--" ? Array(command.dropFirst()) : command
+        let commandStr = displayArgs.joined(separator: " ")
         writeStderrRaw("keypo-vault: decrypting \(secretNames.count) secret(s) for: \(commandStr)")
         for policyName in ["open", "passcode", "biometric"] {
             guard let names = secretsByVault[policyName] else { continue }
@@ -199,14 +200,11 @@ struct VaultExecCommand: ParsableCommand {
             childEnv[name] = value
         }
 
-        // Coalesce sh -c / bash -c arguments into a single command string.
-        // swift-argument-parser tokenizes 'npm run build && npm run start' into
-        // separate strings, but sh -c expects a single command argument.
-        var execArgs = command
-        if execArgs.count > 2,
-           (execArgs[0] == "sh" || execArgs[0] == "bash" || execArgs[0] == "/bin/sh" || execArgs[0] == "/bin/bash"),
-           execArgs[1] == "-c" {
-            execArgs = [execArgs[0], "-c", execArgs[2...].joined(separator: " ")]
+        // Strip -- and coalesce sh -c arguments
+        let execArgs = ExecArgsHelper.prepareExecArgs(command)
+        guard !execArgs.isEmpty else {
+            writeStderr("no command specified after --")
+            throw ExitCode(126)
         }
 
         // Spawn child process
