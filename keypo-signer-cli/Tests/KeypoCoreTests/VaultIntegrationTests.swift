@@ -9,8 +9,9 @@ final class VaultIntegrationTests: XCTestCase {
     var store: VaultStore!
     let manager = VaultManager()
 
-    override func setUp() {
-        super.setUp()
+    override func setUp() throws {
+        try super.setUp()
+        try XCTSkipUnless(SecureEnclave.isAvailable, "Secure Enclave not available (CI)")
         tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("keypo-vault-test-\(UUID().uuidString)")
         try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
