@@ -24,7 +24,7 @@ This project lives in the `keypo-wallet/` directory of the `keypo-wallet` monore
 - **Paymaster-agnostic (ERC-7677).** A single ERC-7677 implementation works across Pimlico, Coinbase, Alchemy, and any compliant provider. No `PaymasterProvider` trait needed.
 - **Bundler-only submission.** All post-setup transactions go through ERC-4337 bundlers. This enables gas sponsorship via paymasters.
 - **Subprocess signing.** The crate calls `keypo-signer` as a subprocess. No FFI, no framework dependencies.
-- **Configurable key policy.** During setup, users choose the Secure Enclave key protection level: open, passcode, or biometric (Touch ID). This maps to keypo-signer-cli's `--policy` flag.
+- **Configurable key policy.** During setup, users choose the Secure Enclave key protection level: open, passcode, or biometric (Touch ID). This maps to keypo-signer's `--policy` flag.
 - **Testnet-first.** Initial development and testing targets Base Sepolia.
 
 ### 1.2 Relationship to keypo-account
@@ -37,11 +37,11 @@ The `keypo-account` Foundry project (in the same monorepo) deploys the default s
 
 This crate consumes those outputs but does not depend on the Solidity source. Alternative implementations can be used by providing a different `AccountImplementation` trait implementation.
 
-### 1.3 Relationship to keypo-signer-cli
+### 1.3 Relationship to keypo-signer
 
-The `keypo-signer-cli` Swift CLI (in the same monorepo, migrated from [github.com/keypo-us/keypo-signer-cli](https://github.com/keypo-us/keypo-signer-cli)) provides Secure Enclave P-256 key management and signing. The canonical specification of its commands, output format, and key policies is in its [SPEC.md](https://github.com/keypo-us/keypo-signer-cli/blob/main/SPEC.md).
+The `keypo-signer` Swift CLI (in the same monorepo, migrated from [github.com/keypo-us/keypo-signer](https://github.com/keypo-us/keypo-signer)) provides Secure Enclave P-256 key management and signing. The canonical specification of its commands, output format, and key policies is in its [SPEC.md](https://github.com/keypo-us/keypo-signer/blob/main/SPEC.md).
 
-Key policies supported by keypo-signer-cli:
+Key policies supported by keypo-signer:
 - **open** — No biometric or passcode required. Key is accessible without user interaction.
 - **passcode** — Device passcode required before each signing operation.
 - **biometric** — Touch ID (biometric) required before each signing operation.
@@ -298,8 +298,8 @@ struct ChainConfig {
 
 ```rust
 /// Wraps the keypo-signer CLI binary as a subprocess.
-/// Parses JSON output per the keypo-signer-cli SPEC.md.
-/// See: https://github.com/keypo-us/keypo-signer-cli/blob/main/SPEC.md
+/// Parses JSON output per the keypo-signer SPEC.md.
+/// See: https://github.com/keypo-us/keypo-signer/blob/main/SPEC.md
 ///
 /// Construction:
 /// - new(): Uses "keypo-signer" from PATH
@@ -335,7 +335,7 @@ struct ChainConfig {
 ///   signature over SHA256(digest) instead of digest — breaking on-chain
 ///   P-256 verification. keypo-signer handles this by detecting 32-byte
 ///   inputs and using the pre-hashed signing path.
-///   See: keypo-signer-cli SecureEnclaveManager.signData()
+///   See: keypo-signer SecureEnclaveManager.signData()
 ///
 ///   Test: Mock subprocess returning valid signature JSON
 ///   Test: Verify (r, s) are correctly parsed as B256
@@ -889,7 +889,7 @@ This is the Rust ecosystem's standard approach for cryptographic key generation.
 
 ### 7.1 Unit Tests
 
-- KeypoSigner parsing with mocked subprocess output (test against JSON format from [SPEC.md](https://github.com/keypo-us/keypo-signer-cli/blob/main/SPEC.md))
+- KeypoSigner parsing with mocked subprocess output (test against JSON format from [SPEC.md](https://github.com/keypo-us/keypo-signer/blob/main/SPEC.md))
 - AccountImplementation encode/decode roundtrips — **especially ERC-7821 mode `0x01` encoding for single and batch calls**
 - StateStore CRUD — including multi-chain deployment tracking
 - BundlerClient JSON-RPC serialization (ERC-7769 request/response formats)

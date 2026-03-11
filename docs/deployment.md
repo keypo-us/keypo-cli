@@ -80,7 +80,7 @@ forge verify-contract <address> src/KeypoAccount.sol:KeypoAccount \
 | Workflow | Trigger | Purpose |
 |---|---|---|
 | `rust.yml` | Push/PR touching `keypo-wallet/` | Fmt, check, test, clippy |
-| `swift.yml` | Push/PR touching `keypo-signer-cli/` | Build + test on macOS |
+| `swift.yml` | Push/PR touching `keypo-signer/` | Build + test on macOS |
 | `foundry.yml` | Push/PR touching `keypo-account/` | Build + test with Foundry |
 | `release-signer.yml` | `signer-v*` tag | Code-sign, notarize, create GitHub release |
 

@@ -1,6 +1,6 @@
-# CLAUDE.md -- keypo-wallet monorepo
+# CLAUDE.md -- keypo-cli monorepo
 
-A CLI that turns a Mac into a programmable hardware wallet using Secure Enclave P-256 keys, EIP-7702 smart account delegation, and ERC-4337 bundler submission. Three languages: Rust (CLI + crate), Swift (signer), Solidity (smart account). macOS Apple Silicon only.
+A macOS CLI for hardware-bound key management and encrypted secret storage using Secure Enclave P-256 keys. Includes a smart wallet (EIP-7702 + ERC-4337) and an encrypted vault. Three languages: Rust (wallet CLI), Swift (signer CLI), Solidity (smart account). Apple Silicon only.
 
 ## Repo Structure
 
@@ -8,7 +8,7 @@ A CLI that turns a Mac into a programmable hardware wallet using Secure Enclave 
 |---|---|
 | `keypo-account/` | Foundry -- Solidity smart account (ERC-4337 v0.7, P-256, ERC-7821) |
 | `keypo-wallet/` | Rust crate + CLI -- setup, signing, bundler, queries |
-| `keypo-signer-cli/` | Swift CLI -- Secure Enclave P-256 key management and encrypted secret storage |
+| `keypo-signer/` | Swift CLI -- Secure Enclave P-256 key management and encrypted secret storage |
 | `homebrew/` | Homebrew tap formula |
 | `deployments/` | Per-chain deployment records (JSON) |
 | `tests/` | Integration tests + WebAuthn test frontend |
@@ -22,7 +22,7 @@ A CLI that turns a Mac into a programmable hardware wallet using Secure Enclave 
 cd keypo-wallet && cargo check && cargo test && cargo clippy --all-targets -- -D warnings
 
 # Swift (macOS only)
-cd keypo-signer-cli && swift build && swift test
+cd keypo-signer && swift build && swift test
 
 # Foundry
 cd keypo-account && forge build && forge test -vvv
@@ -44,8 +44,8 @@ cd keypo-wallet && cargo test -- --ignored --test-threads=1
 | [docs/decisions/](docs/decisions/) | Architecture Decision Records (ADRs) |
 | [docs/archive/](docs/archive/) | Historical specs, roadmaps, plans |
 | [docs/documentation-spec.md](docs/documentation-spec.md) | Documentation harness spec for AI agent navigation |
-| [keypo-signer-cli/CLAUDE.md](keypo-signer-cli/CLAUDE.md) | Swift project: architecture, conventions, gotchas |
-| [keypo-signer-cli/JSON-FORMAT.md](keypo-signer-cli/JSON-FORMAT.md) | Verified JSON output schema for all signer commands |
+| [keypo-signer/CLAUDE.md](keypo-signer/CLAUDE.md) | Swift project: architecture, conventions, gotchas |
+| [keypo-signer/JSON-FORMAT.md](keypo-signer/JSON-FORMAT.md) | Verified JSON output schema for all signer commands |
 
 ## Active Conventions
 

@@ -3,11 +3,11 @@ name: Swift CI
 on:
   push:
     paths:
-      - 'keypo-signer-cli/**'
+      - 'keypo-signer/**'
     branches: [main]
   pull_request:
     paths:
-      - 'keypo-signer-cli/**'
+      - 'keypo-signer/**'
   workflow_dispatch:
 
 jobs:
@@ -16,7 +16,7 @@ jobs:
     timeout-minutes: 15
     defaults:
       run:
-        working-directory: keypo-signer-cli
+        working-directory: keypo-signer
 
     steps:
       - uses: actions/checkout@v4

@@ -9,7 +9,7 @@ status: current
 
 ## Prerequisites
 
-- **macOS 14+ (Sonoma)** on Apple Silicon (arm64). The Secure Enclave is required for keypo-signer-cli.
+- **macOS 14+ (Sonoma)** on Apple Silicon (arm64). The Secure Enclave is required for keypo-signer.
 - **Xcode** or Xcode Command Line Tools (for Swift + CryptoKit).
 
 ## Toolchain
@@ -42,7 +42,7 @@ export PATH="$HOME/.foundry/bin:$PATH"
 
 Add this to your shell profile (`~/.zshrc`).
 
-### Swift (keypo-signer-cli)
+### Swift (keypo-signer)
 
 Swift is included with Xcode. No additional installation needed. Verify: `swift --version`.
 
@@ -89,7 +89,7 @@ cd keypo-wallet && cargo test
 cd keypo-wallet && cargo test -- --ignored --test-threads=1
 
 # Swift tests (macOS only, some require Secure Enclave)
-cd keypo-signer-cli && swift test
+cd keypo-signer && swift test
 
 # Foundry tests
 cd keypo-account && forge test -vvv

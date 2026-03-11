@@ -34,7 +34,7 @@ let sig: Signature = signing_key
     .map_err(|e| Error::Other(format!("P-256 signing failed: {e}")))?;
 ```
 
-### Swift (SecureEnclaveManager in `keypo-signer-cli/Sources/KeypoCore/SecureEnclaveManager.swift`)
+### Swift (SecureEnclaveManager in `keypo-signer/Sources/KeypoCore/SecureEnclaveManager.swift`)
 
 ```swift
 // Cast 32-byte input to SHA256Digest to use signature(for: Digest)
@@ -55,5 +55,5 @@ let signature = try privateKey.signature(for: digest)  // NOT signature(for: Dat
 ## References
 
 - `keypo-wallet/src/signer.rs` line 281 -- Rust PrehashSigner usage
-- `keypo-signer-cli/Sources/KeypoCore/SecureEnclaveManager.swift` lines 82-95 -- Swift SHA256Digest cast
+- `keypo-signer/Sources/KeypoCore/SecureEnclaveManager.swift` lines 82-95 -- Swift SHA256Digest cast
 - ERC-4337 error AA24: "AA24 signature error" indicates signature validation failure in the smart account's `validateUserOp`

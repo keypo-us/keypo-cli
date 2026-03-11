@@ -36,7 +36,7 @@ contract KeypoAccount is Account, SignerP256, ERC7821, Initializable {
     }
 
     /// @dev Validates signatures via two paths:
-    /// - 64 bytes: raw P-256 (r, s) — used by keypo-signer-cli
+    /// - 64 bytes: raw P-256 (r, s) — used by keypo-signer
     /// - >64 bytes: WebAuthn assertion — used by browser passkeys
     /// WebAuthn UV (User Verification) is NOT required — device-level
     /// policy (Secure Enclave biometric/passcode) handles auth instead.

@@ -406,7 +406,7 @@ Based on the spec's formula template. ARM-only guard. Installs both `keypo-walle
 Triggers on `wallet-v*` tag push. Steps:
 
 1. **Build Swift binary** (`keypo-signer`):
-   - `cd keypo-signer-cli && swift build -c release`
+   - `cd keypo-signer && swift build -c release`
    - Code-sign with Developer ID (reuse existing secrets)
    - Notarize with `notarytool`
 

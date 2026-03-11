@@ -8,7 +8,7 @@
 
 ## 1. Overview
 
-This spec describes the unification of `keypo-wallet` and `keypo-signer-cli` into a single installable CLI tool distributed as a Homebrew formula. The goal is a clean, zero-friction path from `brew install` to a signed on-chain transaction — no separate tool installs, no manual env var plumbing, no documentation-hunting for config.
+This spec describes the unification of `keypo-wallet` and `keypo-signer` into a single installable CLI tool distributed as a Homebrew formula. The goal is a clean, zero-friction path from `brew install` to a signed on-chain transaction — no separate tool installs, no manual env var plumbing, no documentation-hunting for config.
 
 ### 1.1 Problem Statement
 
@@ -30,7 +30,7 @@ This is four distinct friction points before the first transaction is possible.
 
 ### 1.3 Non-Goals
 
-- Replacing the `keypo-signer-cli` Swift library internals. The Secure Enclave signing logic is unchanged; only the distribution and invocation model changes.
+- Replacing the `keypo-signer` Swift library internals. The Secure Enclave signing logic is unchanged; only the distribution and invocation model changes.
 - Changing the smart account contract, bundler integration, or signing protocol.
 - GUI or web interface.
 
@@ -243,7 +243,7 @@ keypo-wallet config edit
 
 ## 4. Unified Command Surface
 
-All commands from both `keypo-wallet` and `keypo-signer-cli` are available under a single flat namespace. The key management commands (`create`, `list`, `key-info`, `sign`, `delete`, `rotate`, `verify`) correspond 1:1 to their `keypo-signer-cli` equivalents and delegate to the `keypo-signer` subprocess.
+All commands from both `keypo-wallet` and `keypo-signer` are available under a single flat namespace. The key management commands (`create`, `list`, `key-info`, `sign`, `delete`, `rotate`, `verify`) correspond 1:1 to their `keypo-signer` equivalents and delegate to the `keypo-signer` subprocess.
 
 ### 4.1 Global Flags
 

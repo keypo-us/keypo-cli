@@ -16,7 +16,7 @@ status: current
 | keypo-wallet (scaffolding) | 3 | `cargo test --test '*'` |
 | keypo-wallet (integration) | 10 (ignored in CI) | `cargo test -- --ignored --test-threads=1` |
 | keypo-account (Foundry) | 30 | `forge test` |
-| keypo-signer-cli (Swift) | 94 | `swift test` |
+| keypo-signer (Swift) | 94 | `swift test` |
 | **Total (non-ignored)** | **189 Rust + 30 Foundry + 94 Swift = 313** | |
 
 ## Integration Test Requirements
@@ -58,7 +58,7 @@ status: current
 - Balance queries against live RPC
 - Paymaster-sponsored transactions
 
-### Swift Tests (keypo-signer-cli)
+### Swift Tests (keypo-signer)
 
 | Test Suite | Tests | Description |
 |---|---|---|

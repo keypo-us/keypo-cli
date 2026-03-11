@@ -26,7 +26,7 @@ jobs:
       - name: Verify version sync
         run: |
           RUST_VERSION=$(grep '^version' keypo-wallet/Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
-          SWIFT_VERSION=$(grep 'public let keypoVersion =' keypo-signer-cli/Sources/KeypoCore/Models.swift | sed 's/.*"\(.*\)".*/\1/')
+          SWIFT_VERSION=$(grep 'public let keypoVersion =' keypo-signer/Sources/KeypoCore/Models.swift | sed 's/.*"\(.*\)".*/\1/')
           if [ "$RUST_VERSION" != "$SWIFT_VERSION" ]; then
             echo "::error::Version mismatch: Rust=$RUST_VERSION Swift=$SWIFT_VERSION"
             exit 1

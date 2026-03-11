@@ -12,7 +12,7 @@ This document defines the implementation plan for the keypo smart account system
 
 1. **keypo-account** — Foundry project. Solidity smart account contract, tests, deployment scripts.
 2. **keypo-wallet** — Rust crate + CLI. Client for account setup, P-256 signing via keypo-signer, ERC-4337 bundler interaction.
-3. **keypo-signer-cli** — Swift CLI. Secure Enclave P-256 signing. Migrated from its standalone repo at [github.com/keypo-us/keypo-signer-cli](https://github.com/keypo-us/keypo-signer-cli).
+3. **keypo-signer** — Swift CLI. Secure Enclave P-256 signing. Migrated from its standalone repo at [github.com/keypo-us/keypo-signer](https://github.com/keypo-us/keypo-signer).
 
 The monorepo also contains:
 
@@ -33,7 +33,7 @@ keypo-wallet/                    # Monorepo root
 │   ├── Cargo.toml
 │   ├── src/
 │   └── tests/
-├── keypo-signer-cli/            # Swift CLI (migrated from github.com/keypo-us/keypo-signer-cli)
+├── keypo-signer/            # Swift CLI (migrated from github.com/keypo-us/keypo-signer)
 │   ├── Package.swift
 │   ├── Sources/
 │   ├── Tests/
@@ -56,8 +56,8 @@ keypo-wallet/                    # Monorepo root
 │   └── workflows/
 │       ├── foundry.yml          # Foundry CI (contract tests)
 │       ├── rust.yml             # Rust CI (crate tests)
-│       ├── swift.yml            # Swift CI (keypo-signer-cli build + test)
-│       ├── release-signer.yml   # Build + release keypo-signer-cli binary
+│       ├── swift.yml            # Swift CI (keypo-signer build + test)
+│       ├── release-signer.yml   # Build + release keypo-signer binary
 │       └── update-homebrew.yml  # Update homebrew formula on new signer release
 └── README.md
 ```
@@ -81,20 +81,20 @@ keypo-wallet/                    # Monorepo root
 - [keypo-wallet-spec.md](./keypo-wallet-spec.md) — Rust crate architecture, CLI, bundler integration
 
 **External repos being migrated into this monorepo:**
-- [keypo-signer-cli](https://github.com/keypo-us/keypo-signer-cli) — Swift CLI source, SPEC.md, GitHub Actions
+- [keypo-signer](https://github.com/keypo-us/keypo-signer) — Swift CLI source, SPEC.md, GitHub Actions
 - [homebrew-tap](https://github.com/keypo-us/homebrew-tap) — Homebrew formulae, release workflow
 
 ---
 
 ## Phase 0 — Preflight: Accounts, Secrets & Verification
 
-**Goal:** Set up all accounts/secrets/API keys, configure the repo, migrate external repos, verify keypo-signer-cli works, and answer every open question that could change the architecture before writing code.
+**Goal:** Set up all accounts/secrets/API keys, configure the repo, migrate external repos, verify keypo-signer works, and answer every open question that could change the architecture before writing code.
 
 **Duration:** 1–2 days
 
 **Workflow — Human Setup Then Claude Code Handoff:**
 
-Phase 0 is **human-driven**. A human completes all steps in this phase: creates accounts, provisions API keys, stores secrets in `.env` and GitHub Actions, initializes the monorepo structure, migrates external repos, and runs the keypo-signer-cli verification steps. Once Phase 0 is complete and all exit criteria are met, the human starts a Claude Code session and provides:
+Phase 0 is **human-driven**. A human completes all steps in this phase: creates accounts, provisions API keys, stores secrets in `.env` and GitHub Actions, initializes the monorepo structure, migrates external repos, and runs the keypo-signer verification steps. Once Phase 0 is complete and all exit criteria are met, the human starts a Claude Code session and provides:
 
 1. The GitHub repo URL (e.g., `github.com/keypo-us/keypo-wallet`)
 2. A reference to this roadmap and the spec documents
@@ -126,8 +126,8 @@ Before any code is written, provision all external accounts and store secrets in
 ### 0.2 Monorepo Initialization
 
 1. Create the `keypo-wallet/` monorepo structure shown above.
-2. **Migrate `keypo-signer-cli`** from [github.com/keypo-us/keypo-signer-cli](https://github.com/keypo-us/keypo-signer-cli) into the monorepo:
-   - Copy the full source tree (`Sources/`, `Tests/`, `Package.swift`, `SPEC.md`, `CLAUDE.md`, `.claude/commands/`) into `keypo-wallet/keypo-signer-cli/`.
+2. **Migrate `keypo-signer`** from [github.com/keypo-us/keypo-signer](https://github.com/keypo-us/keypo-signer) into the monorepo:
+   - Copy the full source tree (`Sources/`, `Tests/`, `Package.swift`, `SPEC.md`, `CLAUDE.md`, `.claude/commands/`) into `keypo-wallet/keypo-signer/`.
    - Migrate GitHub Actions workflows from `.github/workflows/` in the standalone repo into the monorepo's `.github/workflows/`, adjusting paths for the new directory structure. These include the Swift build/test CI workflow.
    - Preserve git history with `git subtree` or `git filter-repo` if practical.
 3. **Migrate `homebrew-tap`** from [github.com/keypo-us/homebrew-tap](https://github.com/keypo-us/homebrew-tap) into the monorepo:
@@ -141,19 +141,19 @@ Before any code is written, provision all external accounts and store secrets in
 7. Set up `.github/workflows/` with CI workflows:
    - `foundry.yml` — Foundry build + test
    - `rust.yml` — Rust build + test
-   - `swift.yml` — Swift build + test (keypo-signer-cli)
+   - `swift.yml` — Swift build + test (keypo-signer)
    - `release-signer.yml` — Build universal binary, create GitHub release, compute SHA256
    - `update-homebrew.yml` — On new signer release, update formula in `homebrew-tap` repo
 
-### 0.3 keypo-signer-cli Verification
+### 0.3 keypo-signer Verification
 
-Before any Rust client work begins, verify that keypo-signer-cli works correctly and that its output format is documented.
+Before any Rust client work begins, verify that keypo-signer works correctly and that its output format is documented.
 
-**Reference:** Review the [SPEC.md](https://github.com/keypo-us/keypo-signer-cli/blob/main/SPEC.md) in the keypo-signer-cli repo for the canonical specification of commands, flags, output formats, and key policies.
+**Reference:** Review the [SPEC.md](https://github.com/keypo-us/keypo-signer/blob/main/SPEC.md) in the keypo-signer repo for the canonical specification of commands, flags, output formats, and key policies.
 
 **Verification steps:**
 
-1. Install keypo-signer-cli via Homebrew (`brew tap keypo-us/tap && brew install keypo-signer`) or build from source in the monorepo.
+1. Install keypo-signer via Homebrew (`brew tap keypo-us/tap && brew install keypo-signer`) or build from source in the monorepo.
 2. Create a test key with each supported policy:
    - `keypo-signer create --label test-open --policy open` (no biometric, no passcode)
    - `keypo-signer create --label test-passcode --policy passcode`
@@ -162,9 +162,9 @@ Before any Rust client work begins, verify that keypo-signer-cli works correctly
 4. Run `keypo-signer sign <hex-digest> --key <label> --format json` for each key. Document exact JSON field names (`r`, `s`) and encoding (expected: hex-encoded 32-byte big-endian, low-S normalized).
 5. Confirm `keypo-signer list --format json` returns all keys with labels and policies.
 
-**If `--format json` isn't implemented yet**, add it to keypo-signer-cli first. This is a prerequisite for Phase 3. Refer to the [SPEC.md](https://github.com/keypo-us/keypo-signer-cli/blob/main/SPEC.md) for the expected JSON schema.
+**If `--format json` isn't implemented yet**, add it to keypo-signer first. This is a prerequisite for Phase 3. Refer to the [SPEC.md](https://github.com/keypo-us/keypo-signer/blob/main/SPEC.md) for the expected JSON schema.
 
-**Deliverable:** A verified mapping of keypo-signer-cli commands → JSON output fields that the Rust crate's `KeypoSigner` wrapper will parse.
+**Deliverable:** A verified mapping of keypo-signer commands → JSON output fields that the Rust crate's `KeypoSigner` wrapper will parse.
 
 ### 0.4 Chain Infrastructure Checks (VERIFIED)
 
@@ -191,9 +191,9 @@ All four blocking checks against Base Sepolia have been confirmed:
 ### 0.6 Exit Criteria
 
 - All accounts provisioned and secrets stored in `.env` + GitHub Actions.
-- Monorepo `keypo-wallet/` structure created; keypo-signer-cli and homebrew-tap migrated in.
+- Monorepo `keypo-wallet/` structure created; keypo-signer and homebrew-tap migrated in.
 - All GitHub Actions workflows ported and functional (Swift CI, release, Homebrew update).
-- keypo-signer-cli verified: JSON output format documented for `info`, `sign`, `list`. All three key policies tested (open, passcode, biometric).
+- keypo-signer verified: JSON output format documented for `info`, `sign`, `list`. All three key policies tested (open, passcode, biometric).
 - Target chain confirmed: Base Sepolia (all checks VERIFIED).
 - All toolchain blocking checks pass.
 - No architecture changes needed — proceed to Phases 1 and 2.
@@ -350,7 +350,7 @@ This confirms the on-chain side works before adding Rust client complexity.
 
 **Status:** Complete. 51 tests pass (41 lib + 7 bin + 3 integration). All modules implemented. CLI parses all arguments.
 
-**Depends on:** Phase 0 (keypo-signer-cli JSON format confirmed and verified, monorepo set up).
+**Depends on:** Phase 0 (keypo-signer JSON format confirmed and verified, monorepo set up).
 
 **Runs in parallel with:** Phase 1 (contract work). No dependency on the deployed contract.
 
@@ -1033,7 +1033,7 @@ Every phase follows this order:
 | Foundry lacks EIP-7702 test cheatcodes | Blocks contract integration tests | Medium | Use fork testing against live testnet instead of local EVM. |
 | alloy `sign_authorization` API differs from expected | Adds 1–2 days to Phase 3 | Low | Verify exact API in Phase 0 toolchain checks. Fallback: two-step manual construction. |
 | Bundler rejects UserOps (format mismatch) | Blocks Phase 4 | Medium | Start with `eth_supportedEntryPoints` to verify compatibility. Test packed→unpacked serialization thoroughly. |
-| `keypo-signer --format json` not implemented | Blocks Phase 3 | Low–Medium | Verify in Phase 0.3 against [SPEC.md](https://github.com/keypo-us/keypo-signer-cli/blob/main/SPEC.md). Implement it first if missing. |
+| `keypo-signer --format json` not implemented | Blocks Phase 3 | Low–Medium | Verify in Phase 0.3 against [SPEC.md](https://github.com/keypo-us/keypo-signer/blob/main/SPEC.md). Implement it first if missing. |
 | OZ contract behaves unexpectedly with EIP-7702 | Could require contract redesign | Low | Phase 1 automated tests + manual smoke test catch this before Rust work begins. |
 | ERC-7677 paymaster response format varies by provider | Adds 1–2 days to Phase 4 | Low | ERC-7677 is a standard. Test with Pimlico first; the opaque context forwarding handles provider differences. |
 | ERC-4337 v0.7 nonce handling is non-trivial | Adds 1–2 days to Phase 4 | Medium | Study OZ's `Account` nonce management and EntryPoint's `getNonce` early in Phase 4. |

@@ -1,5 +1,5 @@
 ---
-title: keypo-signer-cli Project Guide
+title: keypo-signer Project Guide
 owner: @davidblumenfeld
 last_verified: 2026-03-05
 status: current

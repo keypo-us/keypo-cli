@@ -129,7 +129,7 @@ The contract accepts two signature formats, routed by length:
 
 #### Raw P-256 (64 bytes)
 
-Used for direct Secure Enclave signing via keypo-signer-cli. This is the primary path for the Rust CLI client.
+Used for direct Secure Enclave signing via keypo-signer. This is the primary path for the Rust CLI client.
 
 | Field | Size | Encoding | Notes |
 |-------|------|----------|-------|
@@ -148,7 +148,7 @@ The exact encoding format (how `authenticatorData`, `clientDataJSON`, `r`, `s`, 
 
 #### Low-S Normalization
 
-OZ's `SignerP256` enforces `s ≤ secp256r1.N / 2`. keypo-signer-cli already outputs low-S normalized signatures, so no client-side transformation is needed for the raw P-256 path. The WebAuthn path should also enforce low-S (verify OZ's `WebAuthn.verify()` behavior).
+OZ's `SignerP256` enforces `s ≤ secp256r1.N / 2`. keypo-signer already outputs low-S normalized signatures, so no client-side transformation is needed for the raw P-256 path. The WebAuthn path should also enforce low-S (verify OZ's `WebAuthn.verify()` behavior).
 
 P-256 curve order N: `0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551`
 
@@ -178,7 +178,7 @@ When a UserOperation targets this account:
 
 The **digest that the client must sign is `userOpHash`**: `keccak256(abi.encode(keccak256(packedUserOp), entryPoint, chainId))`
 
-**CRITICAL — Pre-hashed signing:** The client's P-256 signer must sign this 32-byte `userOpHash` digest **directly, without applying additional SHA-256 hashing**. The on-chain P-256 verification (via RIP-7212 precompile or Solidity fallback) checks the signature against the raw `userOpHash`. If the signer applies SHA-256 before signing (as some P-256 libraries do by default, e.g., CryptoKit's `signature(for: Data)` or the `p256` crate's `Signer::sign()`), the resulting signature will be over `SHA256(userOpHash)` instead of `userOpHash`, and on-chain verification will fail with `AA24 signature error`. See `keypo-signer-cli/Sources/KeypoCore/SecureEnclaveManager.swift` and `keypo-wallet-spec.md §4.4` for implementation details.
+**CRITICAL — Pre-hashed signing:** The client's P-256 signer must sign this 32-byte `userOpHash` digest **directly, without applying additional SHA-256 hashing**. The on-chain P-256 verification (via RIP-7212 precompile or Solidity fallback) checks the signature against the raw `userOpHash`. If the signer applies SHA-256 before signing (as some P-256 libraries do by default, e.g., CryptoKit's `signature(for: Data)` or the `p256` crate's `Signer::sign()`), the resulting signature will be over `SHA256(userOpHash)` instead of `userOpHash`, and on-chain verification will fail with `AA24 signature error`. See `keypo-signer/Sources/KeypoCore/SecureEnclaveManager.swift` and `keypo-wallet-spec.md §4.4` for implementation details.
 
 For the WebAuthn path, `userOpHash` becomes the WebAuthn challenge.
 

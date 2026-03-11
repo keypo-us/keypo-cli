@@ -66,7 +66,7 @@ Standards and gotchas for all three languages in the monorepo. These are enforce
 
 - 4-tier: CLI flag > env var > config file > error. See [ADR-007](decisions/007-4tier-config-resolution.md).
 
-## Swift (keypo-signer-cli)
+## Swift (keypo-signer)
 
 - **Pre-hashed signing**: Cast 32-byte input to `SHA256Digest` via unsafe memory binding, then use `signature(for: Digest)`. NEVER use `signature(for: Data)` which SHA-256 hashes the input. NEVER use `SecKeyCreateSignature` which also hashes. See [ADR-002](decisions/002-p256-prehash-signing.md).
 - **Key API**: Use `SecureEnclave.P256.Signing.PrivateKey` from CryptoKit (not Security framework's `SecKeyCreateSignature`).
