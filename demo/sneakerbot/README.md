@@ -141,3 +141,27 @@ curl -s -X POST http://localhost:8080/v1/tasks \
   never written to disk, logged, or returned to the calling agent.
 - The agent skill (`SKILL.md`) explicitly forbids `vault get`, writing secrets
   to files, or inspecting the child process environment.
+
+### Tamper protection
+
+An AI agent with file-write access could theoretically modify the bot scripts
+to exfiltrate secrets from `process.env` at runtime. To prevent this, make the
+wrapper script and bot source read-only to the agent by setting root ownership:
+
+```bash
+sudo chown -R root:wheel run-with-vault.sh bot/
+sudo chmod -R a+rX,go-w run-with-vault.sh bot/
+```
+
+This works because Claude Code runs as your user and cannot modify root-owned
+files. The agent can still *execute* `run-with-vault.sh` (it's world-readable
+and executable), but cannot alter the script or the bot code it launches.
+
+When you need to update the bot code, temporarily reclaim ownership:
+
+```bash
+sudo chown -R $(whoami) run-with-vault.sh bot/
+# ... make changes ...
+sudo chown -R root:wheel run-with-vault.sh bot/
+sudo chmod -R a+rX,go-w run-with-vault.sh bot/
+```

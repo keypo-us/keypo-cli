@@ -17,9 +17,36 @@ Orchestrate a Shopify purchase via SneakerBot with credit card secrets injected 
 
 ---
 
-## Prerequisites Check
+## Startup
 
-Before starting, verify:
+Before running a purchase, ensure all services are up. Start them in order:
+
+### 1. PostgreSQL
+
+```bash
+# Homebrew
+brew services start postgresql@14
+
+# Or Docker
+docker compose -f demo/sneakerbot/docker-compose.yml up -d
+```
+
+### 2. SneakerBot API server
+
+```bash
+cd demo/sneakerbot/bot
+nvm use 18
+NODE_ENV=local node ./scripts/start-api-server.js &
+```
+
+Wait for the server to be ready:
+
+```bash
+curl -s http://localhost:8080/v1/tasks | jq .success
+# Expect: true
+```
+
+### 3. Prerequisites check
 
 ```bash
 # 1. Vault has card secrets in biometric tier
@@ -27,11 +54,7 @@ keypo-signer vault list
 # Expect: CARD_NUMBER, NAME_ON_CARD, EXPIRATION_MONTH, EXPIRATION_YEAR, SECURITY_CODE in "biometric"
 # Expect: PORT, DB_USERNAME, DB_PASSWORD, DB_NAME, DB_PORT, DB_HOST, NODE_ENV, STORE_PASSWORD in "open"
 
-# 2. SneakerBot API is reachable
-curl -s http://localhost:8080/v1/tasks | jq .success
-# Expect: true
-
-# 3. At least one address is seeded
+# 2. At least one address is seeded
 curl -s http://localhost:8080/v1/addresses | jq 'length'
 # Expect: >= 1
 ```
@@ -117,3 +140,22 @@ These rules are **absolute** — violating them breaks the security model.
 6. **Never log, echo, or print card values** in any command you construct.
 
 See `skills/keypo-signer/SKILL.md` for the complete vault safety rules.
+
+---
+
+## Shutdown
+
+After the user is done, tear down services in reverse order:
+
+```bash
+# 1. Stop the API server
+lsof -ti:8080 | xargs kill
+
+# 2. Stop PostgreSQL (Homebrew)
+brew services stop postgresql@14
+
+# Or stop PostgreSQL (Docker)
+docker compose -f demo/sneakerbot/docker-compose.yml down
+```
+
+Only shut down when the user asks — they may want to run multiple purchases in a session.
