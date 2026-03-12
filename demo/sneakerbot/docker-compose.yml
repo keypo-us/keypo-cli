@@ -1,0 +1,13 @@
+services:
+  postgres:
+    image: postgres:alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: sneakerbot_demo
+      POSTGRES_USER: sneakerbot
+      POSTGRES_PASSWORD: localdev
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+volumes:
+  pgdata:

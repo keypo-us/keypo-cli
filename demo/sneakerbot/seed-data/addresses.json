@@ -1,0 +1,14 @@
+[
+  {
+    "first_name": "Test",
+    "last_name": "Buyer",
+    "address_line_1": "123 Test Street",
+    "address_line_2": "",
+    "city": "New York",
+    "state": "NY",
+    "zipcode": "10001",
+    "country": "US",
+    "phone_number": "2125551234",
+    "email_address": "mrsneaker1950@gmail.com"
+  }
+]

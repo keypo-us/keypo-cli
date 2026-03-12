@@ -4,3 +4,6 @@
 [submodule "keypo-account/lib/forge-std"]
 	path = keypo-account/lib/forge-std
 	url = https://github.com/foundry-rs/forge-std
+[submodule "demo/sneakerbot/bot"]
+	path = demo/sneakerbot/bot
+	url = https://github.com/keypo-us/SneakerBot.git
