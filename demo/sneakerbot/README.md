@@ -117,6 +117,17 @@ curl -s -X POST http://localhost:8080/v1/tasks \
 ./run-with-vault.sh <TASK_ID>
 ```
 
+### 7. Apply tamper protection
+
+Lock the wrapper and bot code so the agent cannot modify them:
+
+```bash
+sudo chown -R root:wheel run-with-vault.sh bot/
+sudo chmod -R a+rX,go-w run-with-vault.sh bot/
+```
+
+See [Tamper protection](#tamper-protection) for details on why this matters.
+
 ## Files
 
 | File | Purpose |
@@ -144,9 +155,21 @@ curl -s -X POST http://localhost:8080/v1/tasks \
 
 ### Tamper protection
 
-An AI agent with file-write access could theoretically modify the bot scripts
-to exfiltrate secrets from `process.env` at runtime. To prevent this, make the
-wrapper script and bot source read-only to the agent by setting root ownership:
+An AI agent with file-write access could theoretically modify bot scripts to
+exfiltrate secrets from `process.env` at runtime. There are three files in the
+trust chain that must be protected:
+
+1. **`run-with-vault.sh`** — pins the child command to `node ./scripts/start-task.js`.
+   Without this, the agent could call `vault exec` with an arbitrary command
+   like `env` or `bash -c 'echo $CARD_NUMBER'` and read secrets from stdout.
+2. **`bot/scripts/start-task.js`** — the entry point that runs inside `vault exec`
+   with secrets in `process.env`. If modified, it could log secrets before
+   executing checkout logic.
+3. **`bot/`** (all JS files) — any file in the execution chain (`cluster.js`,
+   `shopify.js`, `credit-cards.js`, etc.) has access to `process.env` and could
+   be modified to exfiltrate values.
+
+Lock all three down by setting root ownership:
 
 ```bash
 sudo chown -R root:wheel run-with-vault.sh bot/
@@ -155,7 +178,8 @@ sudo chmod -R a+rX,go-w run-with-vault.sh bot/
 
 This works because Claude Code runs as your user and cannot modify root-owned
 files. The agent can still *execute* `run-with-vault.sh` (it's world-readable
-and executable), but cannot alter the script or the bot code it launches.
+and executable), but cannot alter the wrapper, the entry point, or any code in
+the execution chain.
 
 When you need to update the bot code, temporarily reclaim ownership:
 
