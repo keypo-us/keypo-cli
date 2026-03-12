@@ -1,42 +1,46 @@
-# SneakerBot + Keypo Vault Demo
+# Keypo Checkout Demo
 
-Demonstrates an AI coding agent (Claude Code) orchestrating a Shopify purchase
-via SneakerBot while credit card secrets are injected at runtime through
-`keypo-signer vault exec`. The agent never sees or handles card data — Touch ID
-acts as the human-in-the-loop approval gate.
+Ask Claude Code to buy something from a Shopify store. Your credit card details
+stay locked in the Keypo vault — the agent never sees them. When it's time to
+pay, Touch ID appears on your Mac and you approve the transaction with your
+fingerprint.
 
-## Architecture
+## How It Works
+
+You say something like **"Buy the Keypo Logo Art"** in Claude Code. The agent
+creates a checkout task, then runs a wrapper script that calls
+`keypo-signer vault exec`. The vault decrypts your card details (Touch ID
+required), injects them into a headless browser process, and completes the
+Shopify checkout. You get an order confirmation email from Shopify.
 
 ```
-Claude Code  ──▶  run-with-vault.sh  ──▶  keypo-signer vault exec
-                                              │
-                                     ┌────────┴────────┐
-                                     │  open tier       │  (no auth)
-                                     │  PORT, DB_*, … │
-                                     ├─────────────────┤
-                                     │  biometric tier  │  (Touch ID)
-                                     │  CARD_NUMBER, …  │
-                                     └────────┬────────┘
-                                              │
-                                              ▼
-                                    node start-task.js
-                                    (Puppeteer → Shopify checkout)
+You (Claude Code)  ──▶  run-with-vault.sh  ──▶  keypo-signer vault exec
+                                                       │
+                                              ┌────────┴────────┐
+                                              │  open tier       │  (no auth)
+                                              │  PORT, DB_*, …   │
+                                              ├─────────────────┤
+                                              │  biometric tier  │  (Touch ID)
+                                              │  CARD_NUMBER, …  │
+                                              └────────┬────────┘
+                                                       │
+                                                       ▼
+                                             Headless browser
+                                             (Puppeteer → Shopify checkout)
 ```
 
-The agent calls `run-with-vault.sh <TASK_ID>`, which invokes `vault exec --env`
-with a template listing the required env var names. The vault decrypts open-tier
-secrets silently and prompts Touch ID for biometric-tier secrets. All values are
-injected into the child process environment — never written to disk or returned
-to the agent.
+The agent never handles card data. It can't read your secrets from the vault
+without your fingerprint, and the wrapper script is locked down so it can't
+change what runs after decryption.
 
-## Prerequisites
+## Setup
+
+### Prerequisites
 
 - **macOS** with Apple Silicon (Secure Enclave required)
 - **keypo-signer** installed and vault initialized (`keypo-signer vault list`)
 - **Node 18** (`nvm use 18`)
 - **PostgreSQL** running locally (Homebrew or Docker)
-
-## Quick Start
 
 ### 1. Database
 
@@ -56,7 +60,7 @@ Or using Docker:
 docker compose up -d
 ```
 
-### 2. Install SneakerBot dependencies
+### 2. Install dependencies
 
 ```bash
 cd bot
@@ -71,93 +75,117 @@ NODE_ENV=local npx knex migrate:latest
 NODE_ENV=local npx knex seed:run
 ```
 
-### 4. Import secrets to vault
+### 4. Import your secrets to the vault
 
-Non-sensitive config (open tier — no auth required):
+Create two temporary files with your real values:
 
-```bash
-keypo-signer vault import demo/sneakerbot/bot/.env.open --policy open
+**.env.open** — non-sensitive config (open tier, no auth required):
+```
+PORT=8080
+DB_USERNAME=sneakerbot
+DB_PASSWORD=localdev
+DB_NAME=sneakerbot_demo
+DB_PORT=5432
+DB_HOST=localhost
+NODE_ENV=local
+STORE_PASSWORD=your-store-password
 ```
 
-Card secrets (biometric tier — Touch ID required):
-
-```bash
-keypo-signer vault import demo/sneakerbot/bot/.env.card --policy biometric
+**.env.card** — card secrets (biometric tier, Touch ID required):
+```
+CARD_NUMBER=your-card-number
+NAME_ON_CARD=your-name
+EXPIRATION_MONTH=MM
+EXPIRATION_YEAR=YY
+SECURITY_CODE=your-cvv
 ```
 
-> **Note:** `.env.open` and `.env.card` are one-time import files you create
-> locally with real values. They are gitignored and should be deleted after
-> import.
-
-### 5. Start the API server
+Import them:
 
 ```bash
-cd bot
-NODE_ENV=local node ./scripts/start-api-server.js
+keypo-signer vault import .env.open --policy open
+keypo-signer vault import .env.card --policy biometric
 ```
 
-### 6. Create a task and run
+Then delete the files — the secrets are now in the vault:
 
 ```bash
-# Check addresses
-curl -s http://localhost:8080/v1/addresses | jq .
-
-# Create a purchase task
-curl -s -X POST http://localhost:8080/v1/tasks \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "site_id": 3,
-    "url": "https://keypo-store-2.myshopify.com/products/keypo-logo-art?variant=44740698996759",
-    "shipping_address_id": 1,
-    "billing_address_id": 1,
-    "notification_email_address": "mrsneaker1950@gmail.com"
-  }'
-
-# Run the task (Touch ID will be required)
-./run-with-vault.sh <TASK_ID>
+rm .env.open .env.card
 ```
 
-### 7. Apply tamper protection
+### 5. Lock down the code
 
-Lock the wrapper and bot code so the agent cannot modify them:
+This prevents the agent from modifying the checkout scripts to exfiltrate
+your card details. See [Tamper protection](#tamper-protection) for why this
+matters.
 
 ```bash
 sudo chown -R root:wheel run-with-vault.sh bot/
 sudo chmod -R a+rX,go-w run-with-vault.sh bot/
 ```
 
-See [Tamper protection](#tamper-protection) for details on why this matters.
+### 6. Try it
 
-## Files
+Start the API server:
 
-| File | Purpose |
-|---|---|
-| `run-with-vault.sh` | Wrapper: `vault exec --env` → `start-task.js` |
-| `.env.vault-template` | Key-name manifest for `vault exec --env` |
-| `docker-compose.yml` | Postgres-only compose (alternative to Homebrew) |
-| `seed-data/` | Address and site reference data |
-| `SKILL.md` | Claude Code agent skill definition |
-| `bot/` | SneakerBot fork (git submodule → `keypo-us/SneakerBot`) |
+```bash
+cd bot
+NODE_ENV=local node ./scripts/start-api-server.js
+```
+
+Then open Claude Code in the project directory and ask it to buy something:
+
+```
+> Buy the Keypo Logo Art
+```
+
+Touch ID will appear — authenticate, and the agent completes the purchase.
+You'll get an order confirmation email from Shopify.
+
+## Usage
+
+Once set up, the typical flow is:
+
+1. Start Postgres and the API server (if not already running)
+2. Open Claude Code in this directory
+3. Ask it to buy a product (e.g., "Buy the Keypo Logo Art")
+4. Approve with Touch ID when prompted
+5. Check your email for the order confirmation
+
+To shut everything down:
+
+```bash
+# Stop the API server
+lsof -ti:8080 | xargs kill
+
+# Stop Postgres (Homebrew)
+brew services stop postgresql@14
+
+# Or stop Postgres (Docker)
+docker compose down
+```
 
 ## Security Model
 
-- Card secrets (CARD_NUMBER, NAME_ON_CARD, EXPIRATION_MONTH, EXPIRATION_YEAR,
-  SECURITY_CODE) live in the **biometric** vault tier — Touch ID is required
-  every time they are accessed.
-- Config secrets (PORT, DB_*, NODE_ENV, STORE_PASSWORD) live in the **open**
-  vault tier — no authentication needed.
-- The `.env.vault-template` lists key names only; values are blank for card
-  fields and are never populated in the file.
-- `vault exec` injects secrets into the child process environment. They are
-  never written to disk, logged, or returned to the calling agent.
-- The agent skill (`SKILL.md`) explicitly forbids `vault get`, writing secrets
-  to files, or inspecting the child process environment.
+Your card details are protected by three layers:
+
+1. **Biometric vault** — card secrets are encrypted with a Secure Enclave key
+   that requires Touch ID to access. The agent cannot decrypt them without your
+   fingerprint.
+
+2. **Process isolation** — `vault exec` injects secrets into the child process
+   environment only. They are never written to disk, logged, or returned to the
+   agent. The agent sees stdout from the checkout process, which only contains
+   status messages ("Entering card details"), not the values themselves.
+
+3. **Tamper protection** — the wrapper script and bot code are root-owned, so
+   the agent cannot modify them. See below.
 
 ### Tamper protection
 
-An AI agent with file-write access could theoretically modify bot scripts to
-exfiltrate secrets from `process.env` at runtime. There are three files in the
-trust chain that must be protected:
+An AI agent with file-write access could theoretically modify the checkout
+scripts to exfiltrate secrets from `process.env` at runtime. There are three
+files in the trust chain that must be protected:
 
 1. **`run-with-vault.sh`** — pins the child command to `node ./scripts/start-task.js`.
    Without this, the agent could call `vault exec` with an arbitrary command
@@ -166,8 +194,8 @@ trust chain that must be protected:
    with secrets in `process.env`. If modified, it could log secrets before
    executing checkout logic.
 3. **`bot/`** (all JS files) — any file in the execution chain (`cluster.js`,
-   `shopify.js`, `credit-cards.js`, etc.) has access to `process.env` and could
-   be modified to exfiltrate values.
+   `shopify.js`, etc.) has access to `process.env` and could be modified to
+   exfiltrate values.
 
 Lock all three down by setting root ownership:
 
@@ -189,3 +217,20 @@ sudo chown -R $(whoami) run-with-vault.sh bot/
 sudo chown -R root:wheel run-with-vault.sh bot/
 sudo chmod -R a+rX,go-w run-with-vault.sh bot/
 ```
+
+## Files
+
+| File | Purpose |
+|---|---|
+| `run-with-vault.sh` | Wrapper: `vault exec --env` → checkout process |
+| `.env.vault-template` | Key-name manifest for `vault exec --env` |
+| `SKILL.md` | Claude Code agent skill definition |
+| `docker-compose.yml` | Postgres-only compose (alternative to Homebrew) |
+| `seed-data/` | Address and site reference data |
+| `bot/` | Checkout bot (fork of [SneakerBot](https://github.com/samc621/SneakerBot)) |
+
+## Credits
+
+The checkout automation is built on [SneakerBot](https://github.com/samc621/SneakerBot)
+by [Samuel Corso](https://github.com/samc621), modified for modern Shopify
+single-page checkout and headless operation.
