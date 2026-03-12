@@ -14,24 +14,45 @@ required), injects them into a headless browser process, and completes the
 Shopify checkout. You get an order confirmation email from Shopify.
 
 ```
-You (Claude Code)  ──▶  run-with-vault.sh  ──▶  keypo-signer vault exec
-                                                       │
-                                              ┌────────┴────────┐
-                                              │  open tier       │  (no auth)
-                                              │  PORT, DB_*, …   │
-                                              ├─────────────────┤
-                                              │  biometric tier  │  (Touch ID)
-                                              │  CARD_NUMBER, …  │
-                                              └────────┬────────┘
-                                                       │
-                                                       ▼
-                                             Headless browser
-                                             (Puppeteer → Shopify checkout)
+┌─────────────────────────────────────────────┐
+│  Claude Code (agent)                        │
+│                                             │
+│  "Buy the Keypo Logo Art"                   │
+│       │                                     │
+│       ▼                                     │
+│  ./run-with-vault.sh <TASK_ID>              │
+│       │                                     │
+│  (waits for exit code + reads stdout)       │
+│  (sees only status messages, never secrets) │
+└───────┬─────────────────────────────────────┘
+        │
+        ▼
+┌─────────────────────────────────────────────┐
+│  Child process (invisible to agent)         │
+│                                             │
+│  keypo-signer vault exec                    │
+│       │                                     │
+│       ├── open tier (no auth)               │
+│       │   PORT, DB_*, STORE_PASSWORD        │
+│       │                                     │
+│       ├── biometric tier (Touch ID)         │
+│       │   CARD_NUMBER, NAME_ON_CARD, …      │
+│       │                                     │
+│       ▼                                     │
+│  Secrets injected into process.env          │
+│       │                                     │
+│       ▼                                     │
+│  node start-task.js                         │
+│  └── Puppeteer (headless browser)           │
+│      └── Shopify checkout                   │
+│          └── Types card into payment fields │
+└─────────────────────────────────────────────┘
 ```
 
-The agent never handles card data. It can't read your secrets from the vault
-without your fingerprint, and the wrapper script is locked down so it can't
-change what runs after decryption.
+Everything below the dotted line happens in a child process that Claude Code
+cannot inspect. The agent sees the process's stdout (status messages like
+"Entering card details") and its exit code — nothing else. The secret values
+exist only in the child process's environment and in the browser's memory.
 
 ## Setup
 
