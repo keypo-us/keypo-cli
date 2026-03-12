@@ -2,6 +2,10 @@
 
 Hardware-bound key management and encrypted secret storage for AI agents. Powered by Mac Secure Enclave and passkeys. Local-first architecture so you never rely on a cloud provider, and no one can extract your keys: not your agent and not even Apple. 
 
+## DISCLAIMER
+
+keypo-cli is open source and very new — please use at your own discretion. This software manages cryptographic keys and secrets. While private keys are hardware-bound to the Secure Enclave and cannot be extracted, bugs in the CLI layer could result in unexpected behavior. Do not use this with high-value keys or secrets in production without your own independent security review. This software is provided under the MIT License, without warranty of any kind.
+
 ## Two CLI Tools
 
 This monorepo contains two CLI tools:
