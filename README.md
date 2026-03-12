@@ -324,10 +324,11 @@ paymaster_policy_id = "sp_clever_unus"
 | `KEYPO_PAYMASTER_POLICY_ID` | Paymaster sponsorship policy ID |
 | `TEST_FUNDER_PRIVATE_KEY` | If set, `setup` auto-funds the new account (read directly from env) |
 
-## DISCLAIMER
-
-keypo-cli is open source and very new — please use at your own discretion. This software manages cryptographic keys and secrets. While private keys are hardware-bound to the Secure Enclave and cannot be extracted, bugs in the CLI layer could result in unexpected behavior. Do not use this with high-value keys or secrets in production without your own independent security review. This software is provided under the MIT License, without warranty of any kind.
 
 ### `.env` file (Foundry / integration tests)
 
 The `.env` file at the repo root is used by Foundry and integration tests, not by the CLI directly. Variables like `PIMLICO_API_KEY`, `BASE_SEPOLIA_RPC_URL`, `DEPLOYER_PRIVATE_KEY`, and `BASESCAN_API_KEY` live there. Foundry auto-loads `.env` via a symlink (`keypo-account/.env` -> `../.env`).
+
+## DISCLAIMER
+
+keypo-cli is open source and very new — please use at your own discretion. This software manages cryptographic keys and secrets. While private keys are hardware-bound to the Secure Enclave and cannot be extracted, bugs in the CLI layer could result in unexpected behavior. Do not use this with high-value keys or secrets in production without your own independent security review. This software is provided under the MIT License, without warranty of any kind.
