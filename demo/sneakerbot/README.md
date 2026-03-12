@@ -28,8 +28,8 @@ just change the product URL and store password.
 
 You say something like **"Buy the Keypo Logo Art"** in Claude Code. The agent
 creates a checkout task, then runs a wrapper script that calls
-`keypo-signer vault exec`. The vault decrypts your card details (Touch ID
-required), injects them into a headless browser process, and completes the
+`keypo-signer vault exec`. You're prompted by Touch ID to decrypt your card details, 
+which are then injected into a headless browser process to complete the
 Shopify checkout. You get an order confirmation email from Shopify.
 
 ```
@@ -315,6 +315,25 @@ sudo chmod -R a+rX,go-w run-with-vault.sh bot/
 | `docker-compose.yml` | Postgres-only compose (alternative to Homebrew) |
 | `seed-data/` | Address and site reference data |
 | `bot/` | Checkout bot (fork of [SneakerBot](https://github.com/samc621/SneakerBot)) |
+
+## Next Steps
+
+This demo handles checkout — the agent completes a purchase for a product you
+specify. A natural next step is **product discovery**: let the agent browse and
+find products before buying them.
+
+Shopify now offers MCP servers purpose-built for this:
+
+- **[Storefront MCP](https://shopify.dev/docs/agents/catalog/storefront-mcp)** —
+  search products, manage carts, and answer policy questions for a single store.
+  Each Shopify store exposes its own MCP endpoint.
+- **[Catalog MCP](https://shopify.dev/docs/agents/catalog/mcp)** — search
+  products across all Shopify merchants globally. An agent could find the best
+  price for a product across hundreds of millions of listings.
+
+Combining Shopify's discovery MCP with this demo's vault-protected checkout
+would give an agent the full shopping loop — find a product, then buy it with
+Touch ID approval — without ever handling card data.
 
 ## Credits
 
