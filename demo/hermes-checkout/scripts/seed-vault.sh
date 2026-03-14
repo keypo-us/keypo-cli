@@ -54,6 +54,7 @@ if [ "${1:-}" = "--test" ]; then
     prompt_secret "SHIP_ZIP" "Zip code" "91201"
     prompt_secret "SHIP_COUNTRY" "Country code" "US"
     prompt_secret "SHIP_PHONE" "Phone number" "8185551234"
+    prompt_secret "SHIP_EMAIL" "Email for order confirmation" "test@example.com"
 else
     echo "Mode: INTERACTIVE (real data)"
     echo "WARNING: You are entering real payment credentials."
@@ -75,8 +76,11 @@ else
     prompt_secret "SHIP_ZIP" "Postal code"
     prompt_secret "SHIP_COUNTRY" "Country code"
     prompt_secret "SHIP_PHONE" "Phone number"
+    prompt_secret "SHIP_EMAIL" "Email for order confirmation"
 fi
 
 echo ""
 echo "Done! All secrets stored in '$VAULT_LABEL' vault."
-echo "Verify with: keypo-signer vault exec --label $VAULT_LABEL --allow '*' -- env | grep -E '^(CARD_|SHIP_)'"
+echo "Verify with: keypo-signer vault exec --allow '*' -- env | grep -E '^(CARD_|SHIP_)'"
+echo ""
+echo "NOTE: State codes must be uppercase (e.g., 'CA' not 'Ca')."
