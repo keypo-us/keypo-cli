@@ -11,6 +11,9 @@ struct VaultGetCommand: ParsableCommand {
 
     @OptionGroup var globals: GlobalOptions
 
+    @Option(name: .customLong("bio-reason"), help: "Custom biometric prompt message")
+    var bioReason: String?
+
     @Argument(help: "Secret name")
     var name: String
 
@@ -56,8 +59,25 @@ struct VaultGetCommand: ParsableCommand {
             throw ExitCode(3)
         }
 
-        // Share a single LAContext so the user only authenticates once
-        let authContext = LAContext()
+        // Pre-authenticate if vault requires biometric/passcode
+        let authContext: LAContext
+        if found.policy == .biometric || found.policy == .passcode {
+            let reason = bioReason ?? "Keypo Vault Access"
+            do {
+                authContext = try SecureEnclaveManager.preAuthenticate(reason: reason)
+            } catch VaultError.authenticationCancelled {
+                writeStderr("biometric authentication cancelled")
+                throw ExitCode(4)
+            } catch VaultError.biometryUnavailable {
+                writeStderr("biometric authentication not available on this device")
+                throw ExitCode(4)
+            } catch VaultError.authenticationFailed {
+                writeStderr("biometric authentication failed")
+                throw ExitCode(4)
+            }
+        } else {
+            authContext = LAContext()
+        }
 
         // Verify HMAC
         do {

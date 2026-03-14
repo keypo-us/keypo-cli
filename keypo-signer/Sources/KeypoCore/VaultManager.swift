@@ -12,6 +12,8 @@ public enum VaultError: Error, CustomStringConvertible {
     case integrityCheckFailed(String)
     case serializationFailed(String)
     case authenticationCancelled
+    case authenticationFailed
+    case biometryUnavailable
 
     public var description: String {
         switch self {
@@ -21,6 +23,8 @@ public enum VaultError: Error, CustomStringConvertible {
         case .integrityCheckFailed(let msg): return "integrity check failed: \(msg)"
         case .serializationFailed(let msg): return "serialization failed: \(msg)"
         case .authenticationCancelled: return "authentication was cancelled by the user"
+        case .authenticationFailed: return "biometric authentication failed"
+        case .biometryUnavailable: return "biometric authentication not available on this device"
         }
     }
 }

@@ -1,6 +1,7 @@
 import ArgumentParser
 import Foundation
 import KeypoCore
+import LocalAuthentication
 
 struct SignCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
@@ -15,6 +16,9 @@ struct SignCommand: ParsableCommand {
 
     @Option(name: .long, help: "Key to sign with")
     var key: String?
+
+    @Option(name: .customLong("bio-reason"), help: "Custom biometric prompt message")
+    var bioReason: String?
 
     @Flag(name: .long, help: "Read hex data from stdin")
     var stdin: Bool = false
@@ -85,10 +89,28 @@ struct SignCommand: ParsableCommand {
             throw ExitCode(2)
         }
 
+        // Pre-authenticate if key has biometric/passcode policy
+        var authContext: LAContext? = nil
+        if targetKey.policy == .biometric || targetKey.policy == .passcode {
+            let reason = bioReason ?? "Keypo: sign data"
+            do {
+                authContext = try SecureEnclaveManager.preAuthenticate(reason: reason)
+            } catch VaultError.authenticationCancelled {
+                writeStderr("biometric authentication cancelled")
+                throw ExitCode(4)
+            } catch VaultError.biometryUnavailable {
+                writeStderr("biometric authentication not available on this device")
+                throw ExitCode(4)
+            } catch VaultError.authenticationFailed {
+                writeStderr("biometric authentication failed")
+                throw ExitCode(4)
+            }
+        }
+
         // Sign
         let derSignature: Data
         do {
-            derSignature = try manager.signData(inputBytes, dataRepresentation: dataRep)
+            derSignature = try manager.signData(inputBytes, dataRepresentation: dataRep, authContext: authContext)
         } catch let error as KeypoError {
             if case .keyMissing = error {
                 writeStderr(error.description)

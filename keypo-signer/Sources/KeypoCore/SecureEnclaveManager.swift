@@ -7,6 +7,42 @@ public class SecureEnclaveManager {
 
     public init() {}
 
+    // MARK: - LAContext Pre-Authentication
+
+    /// Pre-authenticate the user via LAContext before SE key operations.
+    /// Returns an authenticated LAContext that can be passed to SE operations
+    /// via kSecUseAuthenticationContext, avoiding a second biometric prompt.
+    public static func preAuthenticate(
+        reason: String,
+        policy: LAPolicy = .deviceOwnerAuthenticationWithBiometrics
+    ) throws -> LAContext {
+        let context = LAContext()
+        context.localizedReason = reason
+        let semaphore = DispatchSemaphore(value: 0)
+        var authError: Error?
+        var success = false
+        context.evaluatePolicy(policy, localizedReason: reason) { result, error in
+            success = result
+            authError = error
+            semaphore.signal()
+        }
+        semaphore.wait()
+        if !success {
+            if let laError = authError as? LAError {
+                switch laError.code {
+                case .userCancel:
+                    throw VaultError.authenticationCancelled
+                case .biometryNotAvailable, .biometryNotEnrolled:
+                    throw VaultError.biometryUnavailable
+                default:
+                    throw VaultError.authenticationFailed
+                }
+            }
+            throw VaultError.authenticationFailed
+        }
+        return context
+    }
+
     // MARK: - Key Creation
 
     public func createKey(policy: KeyPolicy) throws -> (dataRepresentation: Data, publicKey: Data) {
@@ -76,8 +112,20 @@ public class SecureEnclaveManager {
 
     // MARK: - Signing
 
-    public func signData(_ data: Data, dataRepresentation: Data) throws -> Data {
-        let privateKey = try loadPrivateKey(dataRepresentation: dataRepresentation)
+    public func signData(_ data: Data, dataRepresentation: Data, authContext: LAContext? = nil) throws -> Data {
+        let privateKey: SecureEnclave.P256.Signing.PrivateKey
+        if let context = authContext {
+            do {
+                privateKey = try SecureEnclave.P256.Signing.PrivateKey(
+                    dataRepresentation: dataRepresentation,
+                    authenticationContext: context
+                )
+            } catch {
+                throw KeypoError.keyMissing("failed to load SE key: \(error.localizedDescription)")
+            }
+        } else {
+            privateKey = try loadPrivateKey(dataRepresentation: dataRepresentation)
+        }
         do {
             if data.count == 32 {
                 // Pre-hashed signing: the caller passes a 32-byte digest (e.g. keccak256).

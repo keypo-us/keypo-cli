@@ -18,7 +18,7 @@ struct VaultExecCommand: ParsableCommand {
     @Option(name: .long, help: "Path to .env file for key name extraction")
     var env: String?
 
-    @Option(name: .long, help: "Custom Touch ID prompt message (default: shows command name)")
+    @Option(name: [.customLong("reason"), .customLong("bio-reason")], help: "Custom Touch ID prompt message (default: shows command name)")
     var reason: String?
 
     @Argument(parsing: .captureForPassthrough)
@@ -133,7 +133,6 @@ struct VaultExecCommand: ParsableCommand {
             // Set up LAContext with command description for biometric/passcode
             var authContext: LAContext? = nil
             if policyName == "biometric" || policyName == "passcode" {
-                let context = LAContext()
                 var reason: String
                 if let custom = self.reason, !custom.isEmpty {
                     reason = custom
@@ -143,8 +142,19 @@ struct VaultExecCommand: ParsableCommand {
                 if reason.count > 150 {
                     reason = String(reason.prefix(147)) + "..."
                 }
-                context.localizedReason = reason
-                authContext = context
+                do {
+                    let context = try SecureEnclaveManager.preAuthenticate(reason: reason)
+                    authContext = context
+                } catch VaultError.authenticationCancelled {
+                    writeStderr("biometric authentication cancelled")
+                    throw ExitCode(1)
+                } catch VaultError.biometryUnavailable {
+                    writeStderr("biometric authentication not available on this device")
+                    throw ExitCode(1)
+                } catch VaultError.authenticationFailed {
+                    writeStderr("biometric authentication failed")
+                    throw ExitCode(1)
+                }
             }
 
             // Verify HMAC
