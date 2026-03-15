@@ -66,8 +66,9 @@ Notes:
 # Copy tool into Hermes
 cp hermes/tools/keypo_approve.py ~/.hermes/hermes-agent/tools/keypo_tool.py
 
-# Copy skills into Hermes
+# Copy skills and category description into Hermes
 mkdir -p ~/.hermes/skills/keypo/keypo-checkout ~/.hermes/skills/keypo/keypo-vault
+cp hermes/skills/DESCRIPTION.md ~/.hermes/skills/keypo/DESCRIPTION.md
 cp hermes/skills/keypo-checkout.md ~/.hermes/skills/keypo/keypo-checkout/SKILL.md
 cp hermes/skills/keypo-vault.md ~/.hermes/skills/keypo/keypo-vault/SKILL.md
 ```
@@ -125,6 +126,103 @@ Hermes will:
 4. Touch ID prompt appears on your Mac
 5. Checkout script fills Shopify checkout and places the order
 6. Hermes reports the order confirmation
+
+## Comparison Shopping (Catalog MCP)
+
+Search across all Shopify stores and compare prices before buying.
+
+### Setup
+
+**1. Generate a Shopify Catalog API bearer token:**
+
+```bash
+curl --silent --request POST \
+  --url 'https://api.shopify.com/auth/access_token' \
+  -H 'Content-Type: application/json' \
+  --data '{
+    "client_id": "f1a93e954e5f9732dc1bdee1c4154ab5",
+    "client_secret": "<your_client_secret>",
+    "grant_type": "client_credentials"
+  }' | jq .
+```
+
+Note the `access_token` and `expires_in` values. Token lasts ~24 hours; regenerate before each demo.
+
+**2. Add the MCP server to `~/.hermes/config.yaml`:**
+
+Add this at the top level (e.g., after `model:` block):
+
+```yaml
+mcp_servers:
+  shopify_catalog:
+    url: "https://discover.shopifyapps.com/global/mcp"
+    headers:
+      Authorization: "Bearer <paste_access_token_here>"
+    tools:
+      resources: false
+      prompts: false
+```
+
+**3. Deploy the comparison shopping skill and update the category description:**
+
+```bash
+# Deploy the skill
+mkdir -p ~/.hermes/skills/keypo/keypo-comparison-shop
+cp hermes/skills/keypo-comparison-shop.md ~/.hermes/skills/keypo/keypo-comparison-shop/SKILL.md
+
+# Update the category description (contains formatting rules that go into the system prompt)
+cp hermes/skills/DESCRIPTION.md ~/.hermes/skills/keypo/DESCRIPTION.md
+```
+
+**4. Add comparison table formatting rules to `~/.hermes/SOUL.md`:**
+
+The comparison table format rules must be in `SOUL.md` (Hermes' system prompt persona file) to be followed strictly. Append the contents of `hermes/skills/SOUL-snippet.md` to your `~/.hermes/SOUL.md`:
+
+```bash
+cat hermes/skills/SOUL-snippet.md >> ~/.hermes/SOUL.md
+```
+
+This is loaded fresh each message — no restart needed. Without this, the model will ignore the skill's formatting rules (max 5 options, no emojis, best value pick, etc.) because skill content is injected as a user message, not a system instruction.
+
+**5. Update the `saved_catalog` ID in the skill file:**
+
+After creating your saved catalog in the Shopify Dev Dashboard (scope: All Shopify products, ships to: US), copy the catalog ID from the catalog URL and replace `REPLACE_WITH_CATALOG_ID` in both:
+- `hermes/skills/keypo-comparison-shop.md` (source)
+- `~/.hermes/skills/keypo/keypo-comparison-shop/SKILL.md` (deployed)
+
+**6. Reload Hermes:**
+
+Send `/reload-mcp` in Hermes, or restart. Verify with "What tools do you have?" — you should see `mcp_shopify_catalog_search_global_products` and `mcp_shopify_catalog_get_global_product_details`.
+
+### Usage
+
+```
+You: Buy me the best chocolate chip cookies
+Hermes: [searches Catalog API, presents comparison table with 3-5 stores]
+You: Go with the best value
+Hermes: [shows purchase summary, asks for confirmation]
+You: Yes
+[Touch ID prompt appears → checkout runs → order placed or card declined]
+```
+
+### Token Refresh
+
+When the token expires (401 errors from Catalog MCP):
+1. Re-run the curl command above to get a new `access_token`
+2. Update the `Authorization` header in `~/.hermes/config.yaml`
+3. Send `/reload-mcp` to Hermes or restart
+
+### Demo Script
+
+1. "I'm going to ask my agent to buy me cookies. I'm not telling it which store. It's going to search across every Shopify store in the world."
+2. Prompt: "Buy me the best chocolate chip cookies you can find."
+3. Hermes searches — one API call to Shopify's Catalog. Results from multiple stores in under a second.
+4. Table presented — 3-4 stores compared with prices, ratings, per-unit costs.
+5. Selection: "Go with the best value."
+6. Confirmation — Hermes shows purchase summary. You say "yes."
+7. Touch ID prompt appears on Mac. Approve.
+8. Result — order placed (real card) or card decline (fake card).
+9. Kicker: "My agent just searched every Shopify store, found the best deal, and bought it. It never saw my credit card."
 
 ## Telegram (Stage 2)
 
