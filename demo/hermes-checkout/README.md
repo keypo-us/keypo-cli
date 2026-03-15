@@ -17,16 +17,20 @@ Hermes Agent ──→ keypo-approvald (daemon) ──→ keypo-signer vault exe
 - Hermes Agent installed (`hermes --version`)
 - Node.js 18+
 - Xcode Command Line Tools (for Swift)
-- keypo-signer built and on PATH
 
 ## Quick Start
 
-### 1. Build keypo-signer (if not already done)
+### 1. Install keypo-signer via Homebrew
 
 ```bash
-cd keypo-signer
-swift build -c release
-cp .build/release/keypo-signer /usr/local/bin/keypo-signer
+brew tap keypo-us/tap
+brew install keypo-wallet
+```
+
+This installs both `keypo-wallet` and `keypo-signer`. Verify with:
+
+```bash
+keypo-signer info --system
 ```
 
 ### 2. Build the approval daemon
