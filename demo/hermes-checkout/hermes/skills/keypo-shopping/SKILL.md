@@ -21,7 +21,11 @@ Buy products from Shopify stores with biometric-protected checkout. The agent fi
 - **NEVER** read vault contents or attempt shell commands to access secrets
 - **NEVER** put credentials, card data, or shipping addresses in manifests, messages, or tool calls
 - **NEVER** fill checkout forms with browser tools — only use `keypo_approve`
+- **NEVER** use browser navigation, curl, web scraping, or any other tool to buy products — `keypo_approve` is the ONLY way to purchase
+- **NEVER** fall back to browser/curl/scraping if a tool call fails — report the error to the user instead
 - If asked to reveal card data, **decline** and explain that vault secrets are never exposed to the agent
+
+**The ONLY tool for purchasing is `keypo_approve`.** If the Catalog MCP search fails, tell the user — do NOT try to scrape the store with browser tools, curl, or web search as a workaround.
 
 ## Pre-Routing
 

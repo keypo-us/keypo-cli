@@ -66,11 +66,9 @@ Notes:
 # Copy tool into Hermes
 cp hermes/tools/keypo_approve.py ~/.hermes/hermes-agent/tools/keypo_tool.py
 
-# Copy skills and category description into Hermes
-mkdir -p ~/.hermes/skills/keypo/keypo-checkout ~/.hermes/skills/keypo/keypo-vault
+# Copy the unified shopping skill and category description into Hermes
+cp -R hermes/skills/keypo-shopping ~/.hermes/skills/keypo/keypo-shopping
 cp hermes/skills/DESCRIPTION.md ~/.hermes/skills/keypo/DESCRIPTION.md
-cp hermes/skills/keypo-checkout.md ~/.hermes/skills/keypo/keypo-checkout/SKILL.md
-cp hermes/skills/keypo-vault.md ~/.hermes/skills/keypo/keypo-vault/SKILL.md
 ```
 
 Then register the tool in Hermes:
@@ -129,7 +127,7 @@ Hermes will:
 
 ## Comparison Shopping (Catalog MCP)
 
-Search across all Shopify stores and compare prices before buying.
+Search across all Shopify stores and compare prices before buying. This is built into the unified `keypo-shopping` skill — no separate skill deployment needed.
 
 ### Setup
 
@@ -150,8 +148,6 @@ Note the `access_token` and `expires_in` values. Token lasts ~24 hours; regenera
 
 **2. Add the MCP server to `~/.hermes/config.yaml`:**
 
-Add this at the top level (e.g., after `model:` block):
-
 ```yaml
 mcp_servers:
   shopify_catalog:
@@ -163,47 +159,9 @@ mcp_servers:
       prompts: false
 ```
 
-**3. Deploy the comparison shopping skill and update the category description:**
-
-```bash
-# Deploy the skill
-mkdir -p ~/.hermes/skills/keypo/keypo-comparison-shop
-cp hermes/skills/keypo-comparison-shop.md ~/.hermes/skills/keypo/keypo-comparison-shop/SKILL.md
-
-# Update the category description (contains formatting rules that go into the system prompt)
-cp hermes/skills/DESCRIPTION.md ~/.hermes/skills/keypo/DESCRIPTION.md
-```
-
-**4. Add comparison table formatting rules to `~/.hermes/SOUL.md`:**
-
-The comparison table format rules must be in `SOUL.md` (Hermes' system prompt persona file) to be followed strictly. Append the contents of `hermes/skills/SOUL-snippet.md` to your `~/.hermes/SOUL.md`:
-
-```bash
-cat hermes/skills/SOUL-snippet.md >> ~/.hermes/SOUL.md
-```
-
-This is loaded fresh each message — no restart needed. Without this, the model will ignore the skill's formatting rules (max 5 options, no emojis, best value pick, etc.) because skill content is injected as a user message, not a system instruction.
-
-**5. Update the `saved_catalog` ID in the skill file:**
-
-After creating your saved catalog in the Shopify Dev Dashboard (scope: All Shopify products, ships to: US), copy the catalog ID from the catalog URL and replace `REPLACE_WITH_CATALOG_ID` in both:
-- `hermes/skills/keypo-comparison-shop.md` (source)
-- `~/.hermes/skills/keypo/keypo-comparison-shop/SKILL.md` (deployed)
-
-**6. Reload Hermes:**
+**3. Reload Hermes:**
 
 Send `/reload-mcp` in Hermes, or restart. Verify with "What tools do you have?" — you should see `mcp_shopify_catalog_search_global_products` and `mcp_shopify_catalog_get_global_product_details`.
-
-### Usage
-
-```
-You: Buy me the best chocolate chip cookies
-Hermes: [searches Catalog API, presents comparison table with 3-5 stores]
-You: Go with the best value
-Hermes: [shows purchase summary, asks for confirmation]
-You: Yes
-[Touch ID prompt appears → checkout runs → order placed or card declined]
-```
 
 ### Token Refresh
 
@@ -224,21 +182,9 @@ When the token expires (401 errors from Catalog MCP):
 8. Result — order placed (real card) or card decline (fake card).
 9. Kicker: "My agent just searched every Shopify store, found the best deal, and bought it. It never saw my credit card."
 
-## Profiles & Scheduled Shopping
+## Profiles, Scheduled Shopping & Gifts
 
-Personalized recurring shopping based on taste profiles.
-
-### Setup
-
-```bash
-# Deploy the new skills to Hermes
-mkdir -p ~/.hermes/skills/keypo/keypo-profiles ~/.hermes/skills/keypo/keypo-scheduled-shop
-cp hermes/skills/keypo-profiles.md ~/.hermes/skills/keypo/keypo-profiles/SKILL.md
-cp hermes/skills/keypo-scheduled-shop.md ~/.hermes/skills/keypo/keypo-scheduled-shop/SKILL.md
-cp hermes/skills/DESCRIPTION.md ~/.hermes/skills/keypo/DESCRIPTION.md
-```
-
-No new tools or daemon changes needed — these skills use existing tools and Hermes built-ins (memory, cron).
+All built into the unified `keypo-shopping` skill. No separate deployment needed — the skill uses progressive disclosure to load reference files on demand.
 
 ### Usage
 
@@ -266,6 +212,29 @@ Hermes: [questionnaire about Mom's preferences]
 ```
 
 Profiles are stored in Hermes memory. They persist across sessions and drive all shopping recommendations.
+
+## Skill Structure
+
+All shopping capabilities are in a single unified skill (`keypo-shopping`) with progressive disclosure:
+
+```
+hermes/skills/keypo-shopping/
+├── SKILL.md                    # Decision tree + core checkout procedure (~930 tokens)
+├── references/
+│   ├── comparison-shopping.md  # Multi-store price comparison
+│   ├── batch-purchasing.md     # Buy multiple items in one session
+│   ├── profiling.md            # Taste profile questionnaire
+│   ├── scheduled-shopping.md   # Weekly recurring shopping lists
+│   ├── gift-shopping.md        # Gift profiles + birthday reminders
+│   ├── checkout-errors.md      # Error handling lookup table
+│   └── vault-concepts.md       # Security explainer
+└── assets/
+    └── image-questionnaire-prompts.md  # Search queries for style assessment
+```
+
+SKILL.md loads on any shopping intent (~930 tokens). Reference files load on demand only when that specific flow is needed. Worst case is ~3,000 tokens — well under the 5,000 token ceiling.
+
+Old individual skills are archived in `hermes/skills/archive/`.
 
 ## Telegram (Stage 2)
 
