@@ -20,6 +20,17 @@ struct VaultBackupResetCommand: ParsableCommand {
             throw ExitCode(1)
         }
 
+        // Pre-flight: check iCloud availability
+        if !iCloudStatus.isSignedIntoICloud {
+            writeStderr("Not signed into iCloud. Vault backup requires iCloud to sync your encryption key and backup file across devices.")
+            writeStderr("Sign into iCloud in System Settings > Apple ID, then try again.")
+            throw ExitCode(1)
+        }
+        if !iCloudStatus.isICloudDriveAvailable {
+            writeStderr("iCloud Drive is not available. Enable iCloud Drive in System Settings > Apple ID > iCloud.")
+            throw ExitCode(1)
+        }
+
         let manager = VaultManager()
         let vaultFile = try store.loadVaultFile()
 

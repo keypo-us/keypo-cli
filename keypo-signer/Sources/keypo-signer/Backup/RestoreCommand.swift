@@ -18,6 +18,17 @@ struct VaultRestoreCommand: ParsableCommand {
     mutating func run() throws {
         let store = makeVaultStore(globals)
 
+        // Pre-flight: check iCloud availability
+        if !iCloudStatus.isSignedIntoICloud {
+            writeStderr("Not signed into iCloud. Vault restore requires iCloud to access your encryption key and backup file.")
+            writeStderr("Sign into iCloud in System Settings > Apple ID, then try again.")
+            throw ExitCode(1)
+        }
+        if !iCloudStatus.isICloudDriveAvailable {
+            writeStderr("iCloud Drive is not available. Enable iCloud Drive in System Settings > Apple ID > iCloud.")
+            throw ExitCode(1)
+        }
+
         // 1. Check for existing local vault
         if store.vaultExists() {
             writeStderr("Existing local vault detected. Destroy it first with 'vault destroy' before restoring.")
