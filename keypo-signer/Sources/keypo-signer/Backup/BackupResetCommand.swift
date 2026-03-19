@@ -31,55 +31,58 @@ struct VaultBackupResetCommand: ParsableCommand {
         try KeychainSync.storeSyncedBackupKey(syncedKey)
 
         // 3. Offer passphrase choice
-        writeStderr("Choose a passphrase option:")
-        writeStderr("  [1] Generate a secure 4-word passphrase (recommended)")
-        writeStderr("  [2] Enter your own passphrase")
-        writeStderr("Choice [1/2]: ")
+        writeStderrRaw("Choose a passphrase option:")
+        writeStderrRaw("  [1] Generate a secure 4-word passphrase (recommended)")
+        writeStderrRaw("  [2] Enter your own passphrase")
+        writeStderrRaw("Choice [1/2]: ")
 
         let choice = readLine(strippingNewline: true) ?? "1"
         let passphrase: String
 
         if choice == "2" {
-            guard let input = readSecretFromTerminal(prompt: "Enter your passphrase: ") else {
-                writeStderr("failed to read passphrase")
-                throw ExitCode(1)
-            }
-            let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
-
-            let strength = PassphraseStrengthEvaluator.evaluate(trimmed)
-            writeStderr(PassphraseStrengthEvaluator.formatBar(strength))
-
-            if strength.level == .weak {
-                writeStderr("WARNING: This passphrase is weak.")
-                writeStderr("Continue anyway? [y/N]: ")
-                guard let confirm = readLine(strippingNewline: true),
-                      confirm.lowercased() == "y" else {
-                    writeStderr("aborted")
+            while true {
+                guard let input = readSecretFromTerminal(prompt: "Enter your passphrase: ") else {
+                    writeStderr("failed to read passphrase")
                     throw ExitCode(1)
                 }
-            }
+                let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
 
-            guard let verify = readSecretFromTerminal(prompt: "Re-enter your passphrase: ") else {
-                writeStderr("failed to read passphrase")
-                throw ExitCode(1)
-            }
-            guard verify.trimmingCharacters(in: .whitespacesAndNewlines) == trimmed else {
-                writeStderr("passphrases do not match")
-                throw ExitCode(1)
-            }
+                let strength = PassphraseStrengthEvaluator.evaluate(trimmed)
+                writeStderrRaw(PassphraseStrengthEvaluator.formatBar(strength))
 
-            passphrase = trimmed
+                if strength.level == .weak || strength.level == .fair {
+                    let warning = strength.level == .weak ? "weak" : "fair"
+                    writeStderrRaw("WARNING: This passphrase is \(warning). A stronger passphrase is recommended.")
+                    writeStderrRaw("  [1] Continue with this passphrase")
+                    writeStderrRaw("  [2] Try a different passphrase")
+                    writeStderrRaw("Choice [1/2]: ")
+                    let confirm = readLine(strippingNewline: true) ?? "2"
+                    if confirm == "2" { continue }
+                }
+
+                guard let verify = readSecretFromTerminal(prompt: "Re-enter your passphrase: ") else {
+                    writeStderr("failed to read passphrase")
+                    throw ExitCode(1)
+                }
+                guard verify.trimmingCharacters(in: .whitespacesAndNewlines) == trimmed else {
+                    writeStderrRaw("Passphrases do not match. Try again.")
+                    continue
+                }
+
+                passphrase = trimmed
+                break
+            }
         } else {
             let words = PassphraseGenerator.generatePassphrase()
-            writeStderr("\nYour new backup passphrase (write this down):\n")
-            for (i, word) in words.enumerated() {
-                writeStderr("  \(i + 1). \(word)")
-            }
-            writeStderr("")
+            writeStderrRaw("\nYour new backup passphrase:\n")
+            writeStderrRaw("┌────────────────────────────────────────┐")
+            writeStderrRaw("│  \(words.enumerated().map { "\($0.offset + 1). \($0.element)" }.joined(separator: "  "))  │")
+            writeStderrRaw("└────────────────────────────────────────┘")
+            writeStderrRaw("")
 
             let indices = PassphraseGenerator.confirmationIndices(wordCount: words.count, confirmCount: 2)
             for idx in indices {
-                writeStderr("Enter word #\(idx + 1): ")
+                writeStderrRaw("Enter word #\(idx + 1): ")
                 guard let input = readLine(strippingNewline: true),
                       input.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == words[idx] else {
                     writeStderr("incorrect word — reset aborted")
@@ -89,6 +92,19 @@ struct VaultBackupResetCommand: ParsableCommand {
 
             passphrase = words.joined(separator: " ")
         }
+
+        // Display passphrase confirmation and warning
+        writeStderrRaw("")
+        writeStderrRaw("╔══════════════════════════════════════════════════════════╗")
+        writeStderrRaw("║  IMPORTANT: Write down your passphrase and store it     ║")
+        writeStderrRaw("║  in a safe place. If you lose your passphrase, your     ║")
+        writeStderrRaw("║  backup will be permanently inaccessible.               ║")
+        writeStderrRaw("║                                                         ║")
+        writeStderrRaw("║  Your passphrase: \(passphrase.padding(toLength: 39, withPad: " ", startingAt: 0))║")
+        writeStderrRaw("║                                                         ║")
+        writeStderrRaw("║  This passphrase will NOT be shown again.               ║")
+        writeStderrRaw("╚══════════════════════════════════════════════════════════╝")
+        writeStderrRaw("")
 
         // 4. Decrypt all vault secrets
         let payload = try decryptAllSecrets(vaultFile: vaultFile, manager: manager)
@@ -125,8 +141,8 @@ struct VaultBackupResetCommand: ParsableCommand {
         try iCloudDrive.writeBackup(blob, isFirstBackup: isFirstBackup)
 
         // 7. Warn about old backups
-        writeStderr("WARNING: Your previous passphrase and encryption key have been regenerated.")
-        writeStderr("All older backups are now permanently unrecoverable.")
+        writeStderrRaw("WARNING: Your previous passphrase and encryption key have been regenerated.")
+        writeStderrRaw("All older backups are now permanently unrecoverable.")
 
         // 8. Reset backup state
         let stateManager = BackupStateManager(configDir: store.configDir)

@@ -44,7 +44,7 @@ struct VaultRestoreCommand: ParsableCommand {
             writeStderr("failed to read passphrase")
             throw ExitCode(1)
         }
-        let passphrase = input.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let passphrase = input.trimmingCharacters(in: .whitespacesAndNewlines)
 
         // 5. Derive backup key from synced key + passphrase + salts from blob
         guard let argon2Salt = Data(base64Encoded: blob.argon2Salt),
