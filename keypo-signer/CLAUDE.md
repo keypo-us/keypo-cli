@@ -1,7 +1,7 @@
 ---
 title: keypo-signer Project Guide
 owner: @davidblumenfeld
-last_verified: 2026-03-05
+last_verified: 2026-03-19
 status: current
 ---
 
@@ -42,7 +42,12 @@ keypo-signer/
 │   │   ├── VaultListCommand.swift      # vault list
 │   │   ├── VaultExecCommand.swift      # vault exec
 │   │   ├── VaultImportCommand.swift    # vault import
-│   │   └── VaultDestroyCommand.swift   # vault destroy
+│   │   ├── VaultDestroyCommand.swift   # vault destroy
+│   │   └── Backup/
+│   │       ├── BackupCommand.swift         # vault backup
+│   │       ├── BackupInfoCommand.swift     # vault backup info
+│   │       ├── BackupResetCommand.swift    # vault backup reset
+│   │       └── RestoreCommand.swift        # vault restore (diff, merge, replace)
 │   └── KeypoCore/             # Library target — all SE and key management logic
 │       ├── SecureEnclaveManager.swift   # SE signing key operations (create, sign, delete)
 │       ├── KeyMetadataStore.swift       # ~/.keypo/keys.json read/write
@@ -50,14 +55,33 @@ keypo-signer/
 │       ├── Models.swift                 # Codable structs for metadata and JSON output
 │       ├── VaultManager.swift           # ECIES encryption/decryption, HMAC integrity, SE key lifecycle
 │       ├── VaultStore.swift             # ~/.keypo/vault.json read/write, secret lookup
-│       └── EnvFileParser.swift          # .env file parsing for vault import/exec
+│       ├── EnvFileParser.swift          # .env file parsing for vault import/exec
+│       └── Backup/
+│           ├── BackupBlob.swift            # BackupPayload, BackupVault, BackupSecret models
+│           ├── BackupCrypto.swift          # Argon2id + HKDF key derivation, AES-GCM encrypt/decrypt
+│           ├── BackupDiff.swift            # computeRestoreDiff(), SecretRef, RestoreDiff
+│           ├── BackupState.swift           # Backup nudge counter, state tracking
+│           ├── iCloudDrive.swift           # iCloud Drive read/write, backup rotation
+│           ├── iCloudStatus.swift          # iCloud availability pre-flight checks
+│           ├── KeychainSync.swift          # iCloud Keychain synced key read/write
+│           ├── PassphraseGenerator.swift   # Diceware-style passphrase generation
+│           ├── PassphraseStrength.swift    # Passphrase format hint for restore prompts
+│           └── Wordlist.swift              # EFF short wordlist for passphrase generation
 └── Tests/
     └── KeypoCoreTests/
         ├── SignatureFormatterTests.swift
         ├── VaultManagerTests.swift
         ├── VaultStoreTests.swift
         ├── VaultIntegrationTests.swift
-        └── EnvFileParserTests.swift
+        ├── EnvFileParserTests.swift
+        ├── ExecArgsHelperTests.swift
+        ├── BackupDiffTests.swift
+        ├── BackupCryptoTests.swift
+        ├── BackupStateTests.swift
+        ├── BackupBlobTests.swift
+        ├── iCloudDriveTests.swift
+        ├── PassphraseGeneratorTests.swift
+        └── WordlistTests.swift
 ```
 
 ## Build Commands
@@ -99,6 +123,10 @@ swift test
 10. **Vault HMAC integrity verification before mutation.** Any command that mutates vault state (set, update, delete, import, destroy) MUST verify the HMAC integrity envelope before making changes. This prevents silent corruption propagation.
 
 11. **Vault atomic writes.** All vault file writes go through `VaultStore`, which writes to a temp file then renames (same pattern as `KeyMetadataStore`).
+
+12. **Restore two-phase merge.** `vault restore` with merge verifies HMACs in Phase A (may trigger auth prompts for passcode/biometric vaults), then mutates in Phase B using cached LAContexts. This is an exception to rule 9's "one LAContext per command" — merge creates one LAContext per policy because different policies require independent authentication.
+
+13. **TTY detection for interactive vs JSON output.** `vault restore` uses `isatty(STDIN_FILENO)` to determine whether to show the interactive diff/prompt or emit JSON conflict output. This ensures terminal users always get the interactive flow even when `--format json` is the default.
 
 ## Coding Conventions
 

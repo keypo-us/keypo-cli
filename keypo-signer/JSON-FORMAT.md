@@ -1,7 +1,7 @@
 ---
 title: keypo-signer JSON Output Format
 owner: @davidblumenfeld
-last_verified: 2026-03-05
+last_verified: 2026-03-19
 status: current
 ---
 
@@ -280,6 +280,120 @@ No JSON output. `vault exec` runs a subprocess with secrets injected as environm
 | `totalSecretsDeleted` | number | Total secrets deleted across all vaults |
 | `destroyedAt` | string | ISO 8601 timestamp |
 
+### `vault backup --format json`
+
+```json
+{
+  "backedUp": true,
+  "secretCount": 3,
+  "vaultNames": ["biometric", "open", "passcode"],
+  "createdAt": "2026-03-01T12:00:00Z",
+  "deviceName": "MacBook-Air"
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `backedUp` | boolean | Always `true` |
+| `secretCount` | number | Total secrets backed up across all vaults |
+| `vaultNames` | array | Policy names of vaults included in the backup |
+| `createdAt` | string | ISO 8601 timestamp of backup creation |
+| `deviceName` | string | Name of the device that created the backup |
+
+### `vault backup info --format json`
+
+```json
+{
+  "backupExists": true,
+  "createdAt": "2026-03-01T12:00:00Z",
+  "deviceName": "MacBook-Air",
+  "secretCount": 3,
+  "vaultNames": ["biometric", "open", "passcode"],
+  "previousBackupExists": false,
+  "syncedKeyAvailable": true,
+  "localSecretsNotBackedUp": 1
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `backupExists` | boolean | Whether a backup exists in iCloud Drive |
+| `createdAt` | string \| null | ISO 8601 timestamp of backup, or null if no backup |
+| `deviceName` | string \| null | Device that created the backup, or null |
+| `secretCount` | number \| null | Secrets in the backup, or null if no backup |
+| `vaultNames` | array \| null | Vault policies in the backup, or null |
+| `previousBackupExists` | boolean | Whether a previous (rotated) backup exists |
+| `syncedKeyAvailable` | boolean | Whether the iCloud Keychain synced key is available |
+| `localSecretsNotBackedUp` | number | Count of local secrets not present in the backup |
+
+### `vault backup reset --format json`
+
+```json
+{
+  "reset": true,
+  "secretCount": 3,
+  "vaultNames": ["biometric", "open", "passcode"],
+  "createdAt": "2026-03-01T12:00:00Z"
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `reset` | boolean | Always `true` |
+| `secretCount` | number | Total secrets in the new backup |
+| `vaultNames` | array | Vault policies included |
+| `createdAt` | string | ISO 8601 timestamp of new backup |
+
+### `vault restore --format json`
+
+Two possible responses depending on whether there is a conflict with an existing local vault.
+
+**Success** (no conflict, or after replace/merge):
+
+```json
+{
+  "restored": true,
+  "secretCount": 3,
+  "vaultNames": ["biometric", "open", "passcode"],
+  "restoredAt": "2026-03-01T12:00:00Z",
+  "fromPrevious": false,
+  "action": "restore",
+  "mergedCount": null
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `restored` | boolean | Always `true` |
+| `secretCount` | number | Total secrets restored |
+| `vaultNames` | array | Vault policies restored |
+| `restoredAt` | string | ISO 8601 timestamp |
+| `fromPrevious` | boolean | `true` if restored from the previous (rotated) backup |
+| `action` | string | `"restore"` (no local vault), `"replace"`, or `"merge"` |
+| `mergedCount` | number \| null | Number of backup-only secrets added (only for `"merge"`, null otherwise) |
+
+**Conflict** (non-interactive / piped, exit code 2):
+
+```json
+{
+  "status": "conflict",
+  "message": "Local vault exists. Re-run with --format pretty for interactive merge.",
+  "localOnly": [{"name": "NEW_SECRET", "policy": "open"}],
+  "backupOnly": [{"name": "PROD_TOKEN", "policy": "passcode"}],
+  "inBoth": [{"name": "API_KEY", "policy": "open"}]
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `status` | string | Always `"conflict"` |
+| `message` | string | Guidance to re-run interactively |
+| `localOnly` | array | Secrets only in the local vault (`name`, `policy`) |
+| `backupOnly` | array | Secrets only in the backup (`name`, `policy`) |
+| `inBoth` | array | Secrets present in both (`name`, `policy`) |
+
+Only emitted when stdin is not a TTY (piped/scripted usage). Interactive terminal sessions always get the diff + prompt flow.
+
 ### Vault Exit Codes
 
 | Code | Meaning |
@@ -292,6 +406,8 @@ No JSON output. `vault exec` runs a subprocess with secrets injected as environm
 | 5 | Empty value (`set`/`update`), integrity check failed (`get`/`delete`), or auth cancelled (`import`) |
 | 6 | Integrity check failed (`set`/`update`), or encryption error (`import`) |
 | 7 | Authentication cancelled (`set`) |
+| 1 | Backup/restore: iCloud unavailable, synced key not found, backup not found, decryption failed, merge failed |
+| 2 | Restore conflict (JSON mode only): local vault exists, diff returned |
 | 126 | `vault exec`: parameter validation failed |
 | 127 | `vault exec`: command not found |
 | 128 | `vault exec`: authentication cancelled |

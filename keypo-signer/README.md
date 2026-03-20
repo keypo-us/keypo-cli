@@ -53,6 +53,11 @@ keypo-signer vault get API_KEY
 | `vault exec <command> [args...]` | Run a command with secrets injected as environment variables |
 | `vault import --file <path> --vault <policy>` | Import secrets from a `.env` file |
 | `vault destroy --confirm` | Delete all vaults, keys, and secrets (irreversible) |
+| `vault backup` | Encrypt and back up vault secrets to iCloud Drive |
+| `vault backup info` | Show backup status (exists, age, unbackup'd secrets) |
+| `vault backup reset` | Reset backup encryption key and passphrase |
+| `vault restore` | Restore vault from iCloud backup (interactive diff/merge if local vault exists) |
+| `vault restore --previous` | Restore from the previous backup instead of current |
 
 ### Using vault exec
 
@@ -67,6 +72,27 @@ keypo-signer vault exec --env .env.example -- npm start
 ```
 
 This is the recommended way for AI agents to run commands that need secrets. See [skills/vault/SKILL.md](../skills/vault/SKILL.md) for agent usage.
+
+### Backup & Restore
+
+`vault backup` encrypts all vault secrets and writes them to iCloud Drive. Encryption uses two factors: an iCloud Keychain synced key (available on all your Apple devices) and a passphrase displayed once at backup time. Both are required to restore — neither alone is sufficient.
+
+Key derivation uses Argon2id (memory-hard) + HKDF to produce the AES-256-GCM encryption key.
+
+`vault restore` decrypts the backup first, then compares it to any existing local vault. If the local vault is empty or doesn't exist, secrets are restored directly. If secrets already exist locally, a name-level diff is shown:
+
+- **Local only** — secrets that exist locally but not in the backup
+- **Backup only** — secrets that exist in the backup but not locally
+- **In both** — secrets that exist in both (kept as-is during merge)
+
+Four options are presented:
+
+1. **Cancel** — leave the local vault unchanged
+2. **Replace** — destroy the local vault and restore all backup secrets
+3. **Merge** — add backup-only secrets to the local vault without touching existing secrets
+4. **Back up first** — prints guidance to back up before replacing, then exits
+
+Merge adds only the backup-only secrets. Local secrets are never overwritten or removed during merge.
 
 ## Vault Policies
 
@@ -108,6 +134,7 @@ See [JSON-FORMAT.md](JSON-FORMAT.md) for the exact JSON schema of each command's
 - **Vault encryption:** ECIES — ECDH key agreement + HKDF-SHA256 + AES-256-GCM
 - **Signatures:** ECDSA with low-S normalization (s <= curve_order/2)
 - **Pre-hashed signing:** the tool signs the input bytes directly. It does NOT hash the input. Callers are responsible for hashing before calling sign.
+- **Backup encryption:** Argon2id + HKDF key derivation, AES-256-GCM encryption, two-factor (iCloud Keychain synced key + passphrase)
 - **Key storage:** private keys live in the Secure Enclave. Metadata is stored in `~/.keypo/keys.json`. Vault data is stored in `~/.keypo/vault.json`.
 
 ## Development

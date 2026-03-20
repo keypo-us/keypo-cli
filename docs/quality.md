@@ -1,7 +1,7 @@
 ---
 title: Test Coverage and Quality
 owner: @davidblumenfeld
-last_verified: 2026-03-05
+last_verified: 2026-03-19
 status: current
 ---
 
@@ -16,8 +16,8 @@ status: current
 | keypo-wallet (scaffolding) | 3 | `cargo test --test '*'` |
 | keypo-wallet (integration) | 10 (ignored in CI) | `cargo test -- --ignored --test-threads=1` |
 | keypo-account (Foundry) | 30 | `forge test` |
-| keypo-signer (Swift) | 94 | `swift test` |
-| **Total (non-ignored)** | **189 Rust + 30 Foundry + 94 Swift = 313** | |
+| keypo-signer (Swift) | 141 | `swift test` |
+| **Total (non-ignored)** | **189 Rust + 30 Foundry + 141 Swift = 360** | |
 
 ## Integration Test Requirements
 
@@ -67,11 +67,19 @@ status: current
 | VaultStoreTests | 14 | Vault file I/O, secret lookup, file locking, atomic writes |
 | VaultIntegrationTests | 22 | End-to-end vault workflows (init → set → get → update → delete → destroy) |
 | EnvFileParserTests | 15 | .env parsing: quotes, comments, export prefix, BOM, dedup |
-| **Total** | **94** | |
+| ExecArgsHelperTests | 6 | vault exec argument parsing and dash-dash stripping |
+| BackupDiffTests | 8 | Restore diff computation: empty/overlapping/subset/policy mismatch/sorted |
+| BackupCryptoTests | 10 | Argon2id + HKDF key derivation, AES-GCM encrypt/decrypt round-trips |
+| BackupStateTests | 4 | Backup nudge counter read/write/increment/reset |
+| BackupBlobTests | 4 | Backup payload serialization, versioned blob round-trip |
+| iCloudDriveTests | 8 | iCloud Drive read/write, backup rotation, previous backup |
+| PassphraseGeneratorTests | 4 | Word count, wordlist membership, randomness, confirmation indices |
+| WordlistTests | 3 | Wordlist count, format validation, no duplicates |
+| **Total** | **141** | |
 
 ## Known Gaps
 
 - No code coverage measurement configured (consider `cargo-tarpaulin` or `cargo-llvm-cov`)
-- ~~Swift test count not tracked automatically~~ (now tracked: 94 tests)
+- ~~Swift test count not tracked automatically~~ (now tracked: 141 tests)
 - No fuzz testing for ABI encoding/decoding
 - WebAuthn frontend tests are manual only (`tests/webauthn-frontend/`)

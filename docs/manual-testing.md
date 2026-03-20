@@ -1,7 +1,7 @@
 ---
 title: Manual Testing Checklist
 owner: @davidblumenfeld
-last_verified: 2026-03-05
+last_verified: 2026-03-19
 status: current
 ---
 
@@ -459,6 +459,119 @@ keypo-signer vault get PASS_KEY
 - [ ] Touch ID prompt appears for biometric vault set/get
 - [ ] Passcode prompt appears for passcode vault set/get
 - [ ] Cancelling auth returns appropriate exit code (see exit code table)
+
+### 7.9 Backup & Restore
+
+#### 7.9.1 Backup + Restore (clean slate)
+
+```bash
+keypo-signer vault init
+echo -n "val1" | keypo-signer vault set SECRET_A --vault open
+echo -n "val2" | keypo-signer vault set SECRET_B --vault passcode
+keypo-signer vault backup
+keypo-signer vault destroy --confirm
+keypo-signer vault restore
+keypo-signer vault get SECRET_A
+keypo-signer vault get SECRET_B
+```
+
+- [ ] Backup succeeds, shows passphrase (record it)
+- [ ] Restore prompts for passphrase
+- [ ] Both secrets are restored with correct values
+
+#### 7.9.2 Restore with existing vault — diff display
+
+```bash
+keypo-signer vault init
+echo -n "local-only" | keypo-signer vault set LOCAL_SECRET --vault open
+echo -n "shared" | keypo-signer vault set SHARED_SECRET --vault open
+keypo-signer vault backup
+keypo-signer vault delete SHARED_SECRET --confirm
+echo -n "new-local" | keypo-signer vault set NEW_LOCAL --vault open
+keypo-signer vault restore
+```
+
+- [ ] Diff shows LOCAL_SECRET and NEW_LOCAL as "local only"
+- [ ] Diff shows SHARED_SECRET as "backup only" (was deleted locally after backup)
+- [ ] Four options displayed: cancel / replace / merge / back up first
+
+#### 7.9.3 Cancel (choice 1)
+
+- [ ] Select cancel at the restore prompt
+- [ ] Vault unchanged — `vault list` shows same secrets as before restore
+
+#### 7.9.4 Replace (choice 2)
+
+- [ ] Select replace at the restore prompt
+- [ ] Old vault destroyed, all backup secrets restored
+- [ ] `vault list` shows only the secrets from the backup
+
+#### 7.9.5 Merge (choice 3)
+
+- [ ] Select merge at the restore prompt
+- [ ] Backup-only secrets added to local vault
+- [ ] Local-only secrets preserved
+- [ ] HMAC integrity valid (`vault get` works on all secrets)
+
+#### 7.9.6 Back up first (choice 4)
+
+- [ ] Select "back up first" at the restore prompt
+- [ ] Prints guidance to run `vault backup` first, then exits
+- [ ] Vault unchanged
+
+#### 7.9.7 Merge with passcode/biometric secrets
+
+```bash
+keypo-signer vault init
+echo -n "bio" | keypo-signer vault set BIO_SECRET --vault biometric
+keypo-signer vault backup
+keypo-signer vault destroy --confirm
+keypo-signer vault init
+echo -n "local" | keypo-signer vault set LOCAL_NEW --vault open
+keypo-signer vault restore
+# Select merge
+```
+
+- [ ] Auth prompt appears for biometric vault during merge
+- [ ] Merge succeeds, both BIO_SECRET and LOCAL_NEW accessible
+
+#### 7.9.8 Merge with auth cancellation
+
+- [ ] Cancel Touch ID / passcode prompt during merge
+- [ ] Vault unchanged, error message displayed
+
+#### 7.9.9 Backup info
+
+```bash
+keypo-signer vault backup info
+keypo-signer vault backup info --format json
+```
+
+- [ ] Shows backup exists, creation date, device name, secret count
+- [ ] Shows count of local secrets not backed up
+- [ ] JSON output includes all `VaultBackupInfoOutput` fields
+
+#### 7.9.10 Restore --previous
+
+```bash
+keypo-signer vault backup   # first backup
+# Add more secrets, then:
+keypo-signer vault backup   # second backup (rotates first to "previous")
+keypo-signer vault destroy --confirm
+keypo-signer vault restore --previous
+```
+
+- [ ] Restores from the first (previous) backup, not the latest
+
+#### 7.9.11 Wrong passphrase
+
+```bash
+keypo-signer vault restore
+# Enter incorrect passphrase
+```
+
+- [ ] Decryption fails with helpful error message
+- [ ] Vault unchanged
 
 ---
 
