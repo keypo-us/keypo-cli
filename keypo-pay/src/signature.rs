@@ -25,18 +25,30 @@ pub fn format_p256_signature(
     out
 }
 
-/// Formats a Keychain signature in Tempo's Keychain format (type 0x03).
+/// Formats a Keychain V2 signature in Tempo's format (type 0x04).
 ///
-/// Total 151 bytes: 0x03 || root_address(20) || inner_p256_signature(130)
+/// Total 151 bytes: 0x04 || root_address(20) || inner_p256_signature(130)
 ///
-/// Note: T2.2 validates this format offline. On-chain Keychain signature validation
-/// requires the access key to be authorized first (Phase 4).
+/// The access key signs `keccak256(0x04 || sig_hash || user_address)` (V2 domain separation).
 pub fn format_keychain_signature(root_address: Address, inner_sig: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(1 + 20 + inner_sig.len());
-    out.push(0x03); // type ID
+    out.push(0x04); // type ID (Keychain V2)
     out.extend_from_slice(root_address.as_slice()); // 20 bytes
     out.extend_from_slice(inner_sig); // 130 bytes (P-256 inner)
     out
+}
+
+/// Computes the V2 Keychain signing hash for an access key.
+///
+/// `keccak256(0x04 || sig_hash[32] || user_address[20])`
+///
+/// This domain-separated hash prevents replay across accounts.
+pub fn keychain_v2_signing_hash(sig_hash: alloy::primitives::B256, user_address: Address) -> alloy::primitives::B256 {
+    let mut buf = [0u8; 53]; // 1 + 32 + 20
+    buf[0] = 0x04; // V2 domain separator
+    buf[1..33].copy_from_slice(sig_hash.as_slice());
+    buf[33..].copy_from_slice(user_address.as_slice());
+    alloy::primitives::keccak256(buf)
 }
 
 #[cfg(test)]
@@ -103,11 +115,11 @@ mod tests {
     }
 
     #[test]
-    fn keychain_signature_starts_with_0x03() {
+    fn keychain_signature_starts_with_0x04() {
         let inner = format_p256_signature(&test_sig(), &test_pub_key(), false);
         let root_addr = Address::repeat_byte(0xDD);
         let formatted = format_keychain_signature(root_addr, &inner);
-        assert_eq!(formatted[0], 0x03);
+        assert_eq!(formatted[0], 0x04);
     }
 
     #[test]

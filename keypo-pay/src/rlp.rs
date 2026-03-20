@@ -46,10 +46,17 @@ impl Decodable for TempoCall {
 
 /// A Tempo transaction (type 0x76).
 ///
-/// Field order matches the on-chain RLP encoding observed from Tempo testnet:
-/// chain_id, maxPriorityFeePerGas, maxFeePerGas, gas, calls, accessList,
-/// nonceKey, nonce, validBefore, validAfter, feeToken, keyAuthorization,
-/// aaAuthorizationList
+/// Field order per Tempo spec (confirmed from source code):
+/// ```text
+/// 0x76 || rlp([
+///   chain_id, max_priority_fee_per_gas, max_fee_per_gas, gas,
+///   calls, access_list, nonce_key, nonce,
+///   valid_before, valid_after, fee_token,
+///   fee_payer_signature, aa_authorization_list,
+///   key_authorization?,   // trailing: zero bytes if None
+///   sender_signature      // raw bytes (not RLP list)
+/// ])
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TempoTx {
     pub chain_id: u64,
@@ -63,9 +70,11 @@ pub struct TempoTx {
     pub valid_before: Option<u64>,
     pub valid_after: Option<u64>,
     pub fee_token: Option<Address>,
-    pub key_authorization: Option<Bytes>,
-    // aaAuthorizationList: always empty for now
     pub fee_payer_signature: Option<Bytes>,
+    // aaAuthorizationList: always empty for now
+    /// Raw RLP-encoded signed key authorization (an RLP list, pasted inline).
+    /// When None, zero bytes are emitted (truly trailing/optional).
+    pub key_authorization: Option<Vec<u8>>,
 }
 
 /// Helper for RLP encoding optional values.
@@ -73,14 +82,14 @@ pub struct TempoTx {
 fn encode_optional<T: Encodable>(opt: &Option<T>, out: &mut dyn alloy::rlp::BufMut) {
     match opt {
         Some(v) => v.encode(out),
-        None => out.put_u8(0x80), // RLP empty string
+        None => out.put_u8(0x80),
     }
 }
 
 fn optional_length<T: Encodable>(opt: &Option<T>) -> usize {
     match opt {
         Some(v) => v.length(),
-        None => 1, // 0x80 is 1 byte
+        None => 1, // 0x80
     }
 }
 
@@ -88,12 +97,12 @@ fn optional_length<T: Encodable>(opt: &Option<T>) -> usize {
 const EMPTY_LIST_LEN: usize = 1;
 
 fn encode_empty_list(out: &mut dyn alloy::rlp::BufMut) {
-    out.put_u8(0xc0); // empty list
+    out.put_u8(0xc0);
 }
 
 impl TempoTx {
-    /// RLP length of all fields (excluding the outer list header).
-    pub(crate) fn fields_rlp_len(&self) -> usize {
+    /// RLP length of unsigned fields (no signature, no key_authorization).
+    fn unsigned_fields_len(&self) -> usize {
         self.chain_id.length()
             + self.max_priority_fee_per_gas.length()
             + self.max_fee_per_gas.length()
@@ -105,12 +114,12 @@ impl TempoTx {
             + optional_length(&self.valid_before)
             + optional_length(&self.valid_after)
             + optional_length(&self.fee_token)
-            + optional_length(&self.key_authorization)
+            + optional_length(&self.fee_payer_signature)
             + EMPTY_LIST_LEN // aaAuthorizationList
     }
 
-    /// Encode all fields (without outer list header).
-    fn encode_fields(&self, out: &mut dyn alloy::rlp::BufMut) {
+    /// Encode the common fields (everything before key_authorization/signature).
+    fn encode_common_fields(&self, out: &mut dyn alloy::rlp::BufMut) {
         self.chain_id.encode(out);
         self.max_priority_fee_per_gas.encode(out);
         self.max_fee_per_gas.encode(out);
@@ -122,24 +131,25 @@ impl TempoTx {
         encode_optional(&self.valid_before, out);
         encode_optional(&self.valid_after, out);
         encode_optional(&self.fee_token, out);
-        encode_optional(&self.key_authorization, out);
+        encode_optional(&self.fee_payer_signature, out);
         encode_empty_list(out); // aaAuthorizationList
     }
 }
 
 impl Encodable for TempoTx {
     fn encode(&self, out: &mut dyn alloy::rlp::BufMut) {
-        let payload_len = self.fields_rlp_len();
+        // For signing hash: encode just the unsigned fields (no key_auth, no sig)
+        let payload_len = self.unsigned_fields_len();
         alloy::rlp::Header {
             list: true,
             payload_length: payload_len,
         }
         .encode(out);
-        self.encode_fields(out);
+        self.encode_common_fields(out);
     }
 
     fn length(&self) -> usize {
-        let payload_len = self.fields_rlp_len();
+        let payload_len = self.unsigned_fields_len();
         alloy::rlp::length_of_length(payload_len) + payload_len
     }
 }
@@ -150,35 +160,31 @@ impl Decodable for TempoTx {
         if !header.list {
             return Err(alloy::rlp::Error::UnexpectedString);
         }
-        let remaining = buf.len();
 
         let chain_id = u64::decode(buf)?;
         let max_priority_fee_per_gas = u128::decode(buf)?;
         let max_fee_per_gas = u128::decode(buf)?;
         let gas_limit = u64::decode(buf)?;
         let calls = Vec::<TempoCall>::decode(buf)?;
-
-        // accessList (skip empty list)
-        let _access_list_header = alloy::rlp::Header::decode(buf)?;
-
+        let _access_list_header = alloy::rlp::Header::decode(buf)?; // skip empty list
         let nonce_key = U256::decode(buf)?;
         let nonce = u64::decode(buf)?;
         let valid_before = decode_optional_u64(buf)?;
         let valid_after = decode_optional_u64(buf)?;
         let fee_token = decode_optional_address(buf)?;
-        let key_authorization = decode_optional_bytes(buf)?;
+        let fee_payer_signature = decode_optional_bytes(buf)?;
+        let _aa_list_header = alloy::rlp::Header::decode(buf)?; // skip empty list
 
-        // aaAuthorizationList (skip empty list)
-        let _aa_list_header = alloy::rlp::Header::decode(buf)?;
-
-        // Verify we consumed exactly the payload
-        let consumed = remaining - buf.len();
-        if consumed != header.payload_length {
-            return Err(alloy::rlp::Error::ListLengthMismatch {
-                expected: header.payload_length,
-                got: consumed,
-            });
-        }
+        // key_authorization is trailing: check if next byte is an RLP list (>= 0xc0)
+        let key_authorization = if let Some(&first) = buf.first() {
+            if first >= 0xc0 {
+                Some(consume_raw_rlp_item(buf)?)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
 
         Ok(TempoTx {
             chain_id,
@@ -191,10 +197,26 @@ impl Decodable for TempoTx {
             valid_before,
             valid_after,
             fee_token,
+            fee_payer_signature,
             key_authorization,
-            fee_payer_signature: None,
         })
     }
+}
+
+/// Consume an entire RLP item (list or string) from the buffer and return it as raw bytes.
+fn consume_raw_rlp_item(buf: &mut &[u8]) -> alloy::rlp::Result<Vec<u8>> {
+    let item_start = *buf;
+    let header = alloy::rlp::Header::decode(buf)?;
+    let header_len = item_start.len() - buf.len();
+    if buf.len() < header.payload_length {
+        return Err(alloy::rlp::Error::InputTooShort);
+    }
+    let payload = &buf[..header.payload_length];
+    *buf = &buf[header.payload_length..];
+    let mut raw = Vec::with_capacity(header_len + header.payload_length);
+    raw.extend_from_slice(&item_start[..header_len]);
+    raw.extend_from_slice(payload);
+    Ok(raw)
 }
 
 fn decode_optional_address(buf: &mut &[u8]) -> alloy::rlp::Result<Option<Address>> {
@@ -227,7 +249,7 @@ fn decode_optional_bytes(buf: &mut &[u8]) -> alloy::rlp::Result<Option<Bytes>> {
     Bytes::decode(buf).map(Some)
 }
 
-/// RLP-encode a TempoTx (just the fields, no type byte, no signature).
+/// RLP-encode a TempoTx (just the unsigned fields, no type byte, no signature).
 pub fn rlp_encode_tx(tx: &TempoTx) -> Vec<u8> {
     let mut out = Vec::new();
     tx.encode(&mut out);
@@ -242,9 +264,28 @@ pub fn rlp_decode_tx(data: &[u8]) -> Result<TempoTx> {
 
 /// Compute the signing hash for a Tempo transaction.
 ///
-/// `keccak256(0x76 || rlp(fields))`
+/// `keccak256(0x76 || rlp(fields_including_key_authorization))`
+///
+/// When key_authorization is present, it is included in the hash
+/// (as a trailing field in the RLP list).
 pub fn signing_hash(tx: &TempoTx) -> B256 {
-    let rlp = rlp_encode_tx(tx);
+    // Build the RLP list including key_authorization if present
+    let mut payload_len = tx.unsigned_fields_len();
+    if let Some(ref ka) = tx.key_authorization {
+        payload_len += ka.len();
+    }
+
+    let mut rlp = Vec::new();
+    alloy::rlp::Header {
+        list: true,
+        payload_length: payload_len,
+    }
+    .encode(&mut rlp);
+    tx.encode_common_fields(&mut rlp);
+    if let Some(ref ka) = tx.key_authorization {
+        rlp.extend_from_slice(ka);
+    }
+
     let mut prefixed = Vec::with_capacity(1 + rlp.len());
     prefixed.push(0x76);
     prefixed.extend_from_slice(&rlp);
@@ -253,10 +294,19 @@ pub fn signing_hash(tx: &TempoTx) -> B256 {
 
 /// Serialize a signed transaction envelope.
 ///
-/// `0x76 || rlp(fields || signature)`
+/// Without key_authorization:
+/// `0x76 || rlp(unsigned_fields || signature)`
+///
+/// With key_authorization:
+/// `0x76 || rlp(unsigned_fields || key_authorization_rlp || signature)`
 pub fn serialize_signed_tx(tx: &TempoTx, signature: &[u8]) -> Vec<u8> {
     let sig_bytes = Bytes::from(signature.to_vec());
-    let payload_len = tx.fields_rlp_len() + sig_bytes.length();
+
+    // Payload = unsigned fields + optional key_authorization + signature
+    let mut payload_len = tx.unsigned_fields_len() + sig_bytes.length();
+    if let Some(ref ka) = tx.key_authorization {
+        payload_len += ka.len(); // raw RLP bytes, no wrapping
+    }
 
     let mut out = Vec::new();
     out.push(0x76); // type byte
@@ -267,7 +317,14 @@ pub fn serialize_signed_tx(tx: &TempoTx, signature: &[u8]) -> Vec<u8> {
     }
     .encode(&mut out);
 
-    tx.encode_fields(&mut out);
+    tx.encode_common_fields(&mut out);
+
+    // Key authorization (trailing, only if present)
+    if let Some(ref ka) = tx.key_authorization {
+        out.extend_from_slice(ka);
+    }
+
+    // Signature (raw bytes, RLP-encoded as string)
     sig_bytes.encode(&mut out);
 
     out
@@ -293,8 +350,8 @@ mod tests {
             valid_before: None,
             valid_after: None,
             fee_token: None,
-            key_authorization: None,
             fee_payer_signature: None,
+            key_authorization: None,
         }
     }
 
@@ -312,7 +369,6 @@ mod tests {
             fee_token: Some(Address::repeat_byte(0xBB)),
             valid_before: Some(1_700_000_000),
             valid_after: Some(1_600_000_000),
-            key_authorization: Some(Bytes::from(vec![0xDE, 0xAD])),
             ..test_tx()
         };
         let encoded = rlp_encode_tx(&tx);
@@ -386,5 +442,19 @@ mod tests {
         let fake_sig = vec![0x01; 130];
         let envelope = serialize_signed_tx(&tx, &fake_sig);
         assert_eq!(envelope[0], 0x76);
+    }
+
+    #[test]
+    fn serialize_with_key_authorization_longer() {
+        let tx_without = test_tx();
+        let mut tx_with = test_tx();
+        // A minimal RLP list: [0x42] = c1 42
+        tx_with.key_authorization = Some(vec![0xc1, 0x42]);
+
+        let fake_sig = vec![0x01; 130];
+        let env_without = serialize_signed_tx(&tx_without, &fake_sig);
+        let env_with = serialize_signed_tx(&tx_with, &fake_sig);
+        // With key_authorization should be exactly 2 bytes longer
+        assert_eq!(env_with.len(), env_without.len() + 2);
     }
 }

@@ -30,7 +30,7 @@ pub async fn send_tempo_tx(
     signer: &dyn P256Signer,
     signing_key_label: &str,
     root_address: Option<Address>,
-    key_authorization: Option<Bytes>,
+    key_authorization: Option<Vec<u8>>,
 ) -> Result<TxResult> {
     let client = reqwest::Client::new();
     let sender_address: Address = wallet.address.parse()
@@ -53,7 +53,7 @@ pub async fn send_tempo_tx(
     // Contract calls: ~100,000 per call with data (TIP-20 transfer)
     // The testnet transaction we observed used 0x8a210 = 565,776 for a mint
     let base_gas: u64 = if root_address.is_some() { 29_000 } else { 26_000 };
-    let auth_gas: u64 = if key_authorization.is_some() { 57_000 } else { 0 };
+    let auth_gas: u64 = if key_authorization.is_some() { 500_000 } else { 0 }; // key auth is expensive
     let call_gas: u64 = calls.iter().map(|c| {
         if c.data.is_empty() { 21_000 } else { 200_000 }
     }).sum();
@@ -76,11 +76,21 @@ pub async fn send_tempo_tx(
     };
 
     // Compute signing hash
-    let hash = rlp::signing_hash(&tx);
-    tracing::debug!("signing hash: {hash}");
+    let tx_hash = rlp::signing_hash(&tx);
+    tracing::debug!("tx signing hash: {tx_hash}");
+
+    // For access key (Keychain V2), derive the domain-separated hash
+    let effective_hash = match root_address {
+        Some(root_addr) => {
+            let v2_hash = signature::keychain_v2_signing_hash(tx_hash, root_addr);
+            tracing::debug!("keychain v2 hash: {v2_hash}");
+            v2_hash
+        }
+        None => tx_hash,
+    };
 
     // Sign
-    let hash_bytes: &[u8; 32] = hash.as_ref();
+    let hash_bytes: &[u8; 32] = effective_hash.as_ref();
     let sig = signer.sign(hash_bytes, signing_key_label)?;
     let pub_key = signer.get_public_key(signing_key_label)?;
 
@@ -93,7 +103,7 @@ pub async fn send_tempo_tx(
 
     // Serialize signed transaction envelope
     let raw = rlp::serialize_signed_tx(&tx, &final_sig);
-    tracing::debug!("raw tx: {} bytes", raw.len());
+    tracing::debug!("raw tx: {} bytes, hex: 0x{}", raw.len(), hex::encode(&raw));
 
     // Submit
     let tx_hash = rpc::send_raw_transaction(&client, rpc_url, &raw).await?;

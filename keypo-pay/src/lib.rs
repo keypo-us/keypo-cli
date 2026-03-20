@@ -1,3 +1,4 @@
+pub mod access_key;
 pub mod address;
 pub mod config;
 pub mod error;
