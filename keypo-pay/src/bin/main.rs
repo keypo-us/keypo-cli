@@ -272,6 +272,23 @@ OUTPUT:
   RPC:       https://rpc.moderato.tempo.xyz"
     )]
     Info,
+
+    /// Reset the wallet (delete config and Secure Enclave keys)
+    #[command(
+        long_about = "Delete the wallet config and all associated Secure Enclave keys.\n\n\
+            This is irreversible. The root key and all access keys will be permanently \
+            deleted from the Secure Enclave. Any on-chain access keys will remain active \
+            until they expire, but you will lose the ability to sign with them or revoke them.",
+        after_long_help = "\
+EXAMPLES:
+  keypo-pay wallet reset
+
+WARNING:
+  This permanently deletes your root key and all access keys.
+  On-chain access keys will remain active until expiry.
+  You cannot undo this operation."
+    )]
+    Reset,
 }
 
 #[tokio::main]
@@ -294,6 +311,7 @@ async fn main() {
         Commands::Wallet(action) => match action {
             WalletAction::Create { test } => run_wallet_create(test).await,
             WalletAction::Info => run_wallet_info(cli.rpc.as_deref()).await,
+            WalletAction::Reset => run_wallet_reset().await,
         },
         Commands::Tx(action) => match action {
             TxAction::Send {
@@ -339,15 +357,27 @@ async fn run_wallet_create(test: bool) -> std::result::Result<(), Box<dyn std::e
     let policy = if test { "open" } else { "biometric" };
     let label = "tempo-root";
 
-    // Create root key
-    let pub_key = signer.create_key(label, policy)?;
+    // Try to create a new root key. If one already exists in the SE
+    // (e.g., config was deleted but key remains), reuse it.
+    let pub_key = match signer.create_key(label, policy) {
+        Ok(pk) => pk,
+        Err(e) => {
+            let err_msg = format!("{e}");
+            if err_msg.contains("already exists") {
+                eprintln!("Note: Secure Enclave key '{label}' already exists, reusing it.");
+                signer.get_public_key(label)?
+            } else {
+                return Err(e.into());
+            }
+        }
+    };
     let address = derive_tempo_address(&pub_key);
 
     // Build and save wallet config
     let wallet = config::WalletConfig {
         chain_id: config::TESTNET_CHAIN_ID,
         rpc_url: config::TESTNET_RPC_URL.to_string(),
-        root_key_id: format!("com.keypo.signer.{}", label),
+        root_key_id: format!("com.keypo.signer.{label}"),
         address: format!("{address}"),
         default_token: Some("pathusd".to_string()),
         block_explorer_url: None,
@@ -368,6 +398,89 @@ async fn run_wallet_create(test: bool) -> std::result::Result<(), Box<dyn std::e
     println!("  Root key: com.keypo.signer.{label}");
     println!("  Chain ID: {}", wallet.chain_id);
     println!("  RPC:      {}", wallet.rpc_url);
+
+    Ok(())
+}
+
+async fn run_wallet_reset() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    let config_dir = config::tempo_config_dir()?;
+
+    // Load access keys before deleting config (to know which SE keys to delete)
+    let access_keys = config::load_access_keys().unwrap_or_default();
+    let wallet = config::load_wallet_config().ok();
+
+    if wallet.is_none() && !config_dir.exists() {
+        println!("No wallet found. Nothing to reset.");
+        return Ok(());
+    }
+
+    // Show what will be deleted
+    if let Some(ref w) = wallet {
+        println!("This will permanently delete:");
+        println!("  Wallet address: {}", w.address);
+        println!("  Root key:       {}", w.root_key_id);
+        for key in &access_keys.keys {
+            println!("  Access key:     {} ({})", key.name, key.key_id);
+        }
+        println!("  Config dir:     {}", config_dir.display());
+    }
+
+    // Warn about on-chain access keys
+    if !access_keys.keys.is_empty() {
+        eprintln!();
+        eprintln!("WARNING: {} access key(s) may still be authorized on-chain.", access_keys.keys.len());
+        eprintln!("You will lose the ability to revoke them. They will remain active until expiry.");
+    }
+
+    eprintln!();
+    eprintln!("This action is IRREVERSIBLE. Your Secure Enclave keys will be permanently deleted.");
+    eprint!("Type 'reset' to confirm: ");
+
+    // Read confirmation from stdin
+    let mut input = String::new();
+    std::io::stdin()
+        .read_line(&mut input)
+        .map_err(|e| format!("failed to read input: {e}"))?;
+
+    if input.trim() != "reset" {
+        println!("Aborted.");
+        return Ok(());
+    }
+
+    let signer = KeypoSigner::new();
+
+    // Delete access key SE keys
+    for key in &access_keys.keys {
+        let label = key
+            .key_id
+            .strip_prefix("com.keypo.signer.")
+            .unwrap_or(&key.key_id);
+        match signer.run_raw(&["delete", label, "--confirm", "--format", "json"]) {
+            Ok(()) => println!("Deleted SE key: {}", key.key_id),
+            Err(_) => eprintln!("Warning: failed to delete SE key {} (may already be gone)", key.key_id),
+        }
+    }
+
+    // Delete root key
+    if let Some(ref w) = wallet {
+        let root_label = w
+            .root_key_id
+            .strip_prefix("com.keypo.signer.")
+            .unwrap_or(&w.root_key_id);
+        match signer.run_raw(&["delete", root_label, "--confirm", "--format", "json"]) {
+            Ok(()) => println!("Deleted SE key: {}", w.root_key_id),
+            Err(_) => eprintln!("Warning: failed to delete root SE key (may already be gone)"),
+        }
+    }
+
+    // Delete config directory
+    if config_dir.exists() {
+        std::fs::remove_dir_all(&config_dir)?;
+        println!("Deleted config: {}", config_dir.display());
+    }
+
+    println!();
+    println!("Wallet reset complete. Run 'keypo-pay wallet create' to start fresh.");
 
     Ok(())
 }
@@ -1234,6 +1347,15 @@ mod tests {
     fn wallet_info_parses() {
         let cli = Cli::try_parse_from(["keypo-pay", "wallet", "info"]).unwrap();
         assert!(matches!(cli.command, Commands::Wallet(WalletAction::Info)));
+    }
+
+    #[test]
+    fn wallet_reset_parses() {
+        let cli = Cli::try_parse_from(["keypo-pay", "wallet", "reset"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Commands::Wallet(WalletAction::Reset)
+        ));
     }
 
     #[test]
