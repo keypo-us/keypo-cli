@@ -1,6 +1,6 @@
 ---
 title: "keypo-signer vault: Secure Enclave Secret Management Spec"
-owner: @davidblumenfeld
+owner: "@davidblumenfeld"
 last_verified: 2026-03-10
 status: draft
 ---

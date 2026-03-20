@@ -1,6 +1,6 @@
 ---
 title: keypo-signer JSON Output Format
-owner: @davidblumenfeld
+owner: "@davidblumenfeld"
 last_verified: 2026-03-19
 status: current
 ---

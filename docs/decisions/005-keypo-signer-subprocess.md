@@ -1,6 +1,6 @@
 ---
 title: keypo-signer as Subprocess (not FFI)
-owner: @davidblumenfeld
+owner: "@davidblumenfeld"
 last_verified: 2026-03-05
 status: current
 ---

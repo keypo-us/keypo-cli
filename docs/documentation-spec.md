@@ -1,6 +1,6 @@
 ---
 title: Repo Documentation Harness Spec
-owner: @serdave-eth
+owner: "@serdave-eth"
 last_verified: 2026-03-05
 status: current
 ---
@@ -69,7 +69,7 @@ Every document in `docs/` should include a small metadata header:
 ```markdown
 ---
 title: Architecture Overview
-owner: @handle-or-team
+owner: "@handle-or-team"
 last_verified: 2025-06-01
 status: current | draft | stale
 ---

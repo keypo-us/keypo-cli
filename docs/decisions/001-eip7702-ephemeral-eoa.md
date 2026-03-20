@@ -1,6 +1,6 @@
 ---
 title: EIP-7702 Ephemeral EOA for Setup
-owner: @davidblumenfeld
+owner: "@davidblumenfeld"
 last_verified: 2026-03-05
 status: current
 ---

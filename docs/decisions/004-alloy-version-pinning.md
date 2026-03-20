@@ -1,6 +1,6 @@
 ---
 title: Alloy Version Pinning (1.7)
-owner: @davidblumenfeld
+owner: "@davidblumenfeld"
 last_verified: 2026-03-05
 status: current
 ---

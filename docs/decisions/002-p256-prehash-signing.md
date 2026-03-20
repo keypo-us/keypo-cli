@@ -1,6 +1,6 @@
 ---
 title: P-256 Pre-Hash Signing
-owner: @davidblumenfeld
+owner: "@davidblumenfeld"
 last_verified: 2026-03-05
 status: current
 ---
