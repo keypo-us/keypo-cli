@@ -1,7 +1,7 @@
 ---
 title: Development Environment Setup
 owner: "@davidblumenfeld"
-last_verified: 2026-03-05
+last_verified: 2026-03-19
 status: current
 ---
 
@@ -14,9 +14,13 @@ status: current
 
 ## Toolchain
 
+### Swift (keypo-signer)
+
+Swift is included with Xcode. No additional installation needed. This is the only toolchain required for keypo-signer. Verify: `swift --version`.
+
 ### Rust (keypo-wallet)
 
-Rust 1.91+ is required (alloy 1.7 dependency).
+Rust 1.91+ is required (alloy 1.7 dependency). Only needed if building keypo-wallet.
 
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
@@ -27,7 +31,7 @@ Verify: `rustc --version` should show 1.91.0 or later.
 
 ### Foundry (keypo-account)
 
-Foundry 1.5.1 is used for the Solidity project.
+Foundry 1.5.1 is used for the Solidity project. Only needed for smart contract development.
 
 ```bash
 curl -L https://foundry.paradigm.xyz | bash
@@ -42,11 +46,9 @@ export PATH="$HOME/.foundry/bin:$PATH"
 
 Add this to your shell profile (`~/.zshrc`).
 
-### Swift (keypo-signer)
-
-Swift is included with Xcode. No additional installation needed. Verify: `swift --version`.
-
 ## Environment Variables
+
+> **Note:** These environment variables are only needed for keypo-wallet, integration tests, and contract deployment. keypo-signer has no external dependencies — it works standalone with just Xcode.
 
 Copy `.env.example` to `.env` at the repo root:
 
@@ -68,7 +70,25 @@ Fill in the following variables:
 
 The `.env` file is gitignored. `keypo-account/.env` is a symlink to `../.env` so Foundry auto-loads it.
 
-## CLI Configuration
+## Vault Setup (keypo-signer)
+
+After installing keypo-signer (or keypo-wallet, which bundles it), initialize the vault and verify it works:
+
+```bash
+# Create vault encryption keys (one per policy tier)
+keypo-signer vault init
+
+# List vaults (should show open, passcode, biometric)
+keypo-signer vault list
+
+# Store and retrieve a test secret
+echo -n "test" | keypo-signer vault set TEST_KEY --vault open
+keypo-signer vault get TEST_KEY
+```
+
+**Backup setup (optional):** Vault backup requires iCloud sign-in, iCloud Drive, and iCloud Keychain enabled on the Mac. Run `keypo-signer vault backup` to create the first backup — it will generate a passphrase and synced encryption key automatically.
+
+## CLI Configuration (keypo-wallet)
 
 After building the Rust CLI, initialize the config file:
 
@@ -82,16 +102,16 @@ This creates `~/.keypo/config.toml` with default settings. Configuration resolut
 ## Running Tests
 
 ```bash
-# Rust unit + bin tests (no secrets needed)
+# Swift tests (keypo-signer — some require Secure Enclave)
+cd keypo-signer && swift test
+
+# Rust unit + bin tests (keypo-wallet — no secrets needed)
 cd keypo-wallet && cargo test
 
 # Rust integration tests (requires .env + Base Sepolia access)
 cd keypo-wallet && cargo test -- --ignored --test-threads=1
 
-# Swift tests (macOS only, some require Secure Enclave)
-cd keypo-signer && swift test
-
-# Foundry tests
+# Foundry tests (keypo-account)
 cd keypo-account && forge test -vvv
 ```
 

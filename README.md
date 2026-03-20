@@ -1,38 +1,37 @@
 # keypo-cli
 
-Hardware-bound key management and encrypted secret storage for AI agents. Powered by Mac Secure Enclave and passkeys. Local-first architecture so you never rely on a cloud provider, and no one can extract your keys: not your agent and not even Apple. 
+Never give your agents access to your sensitive information. 
+
+Hardware-bound key management and encrypted secret storage, powered by Mac Secure Enclave and passkeys. Local-first architecture so you never rely on a cloud provider, and no one can extract your keys or your secrets: not your agent and not even Apple. 
 
 ## Two CLI Tools
 
-This monorepo contains two CLI tools:
-
 | CLI | Description |
 |---|---|
-| **`keypo-signer`** | Secure Enclave P-256 key management + encrypted vault. The foundation layer — create keys, sign digests, store and inject secrets. |
-| **`keypo-wallet`** | A programmable hardware wallet built on `keypo-signer`. Your agent can do anything on-chain but it can't see the private key. |
-
-`keypo-wallet` includes `keypo-signer` — one install gets both binaries.
+| **`keypo-signer`** | The core product — Secure Enclave P-256 key management, encrypted vault, iCloud backup. Create keys, sign digests, store and inject secrets. |
+| **`keypo-wallet`** | Optional extension for on-chain use — adds ERC-4337 smart account delegation, bundler submission, and gas sponsorship. Builds on `keypo-signer`. |
 
 ## Install
 
 ```bash
-# Both tools (recommended)
-brew install keypo-us/tap/keypo-wallet
-
-# Signer only
+# Core tool — key management + encrypted vault
 brew install keypo-us/tap/keypo-signer
+
+# Also available: adds smart account + bundler (includes keypo-signer)
+brew install keypo-us/tap/keypo-wallet
 ```
 
-Run `keypo-wallet --help` or `keypo-signer --help` after installing to see available commands.
+Run `keypo-signer --help` or `keypo-wallet --help` after installing to see available commands.
 
 ## Monorepo Structure
 
 | Directory | Description |
 |---|---|
+| `keypo-signer/` | Swift CLI — Secure Enclave P-256 key management, encrypted vault, iCloud backup (core product) |
+| `keypo-wallet/` | Rust crate + CLI — ERC-4337 smart account setup, signing, bundler interaction (optional extension) |
 | `keypo-account/` | Foundry project — Solidity smart account contract (ERC-4337 v0.7) |
-| `keypo-wallet/` | Rust crate + CLI — account setup, signing, bundler interaction |
-| `keypo-signer/` | Swift CLI — Secure Enclave P-256 key management and encrypted secret storage (macOS) |
 | `demo/checkout/` | Checkout demo — AI agent buys from Shopify with Touch ID approval |
+| `demo/hermes-checkout/` | Hermes agent demo — comparison shopping, taste profiles, scheduled shopping, Telegram |
 | `homebrew/` | Homebrew tap formulas |
 | `deployments/` | Per-chain deployment records (JSON) |
 | `skills/` | Claude Code agent skills (npm: `keypo-skills`) |
@@ -41,7 +40,7 @@ Run `keypo-wallet --help` or `keypo-signer --help` after installing to see avail
 ## Prerequisites
 
 - **macOS with Apple Silicon** — required for Secure Enclave signing
-- **Rust 1.91+** — only needed if building from source ([install](https://rustup.rs/))
+- **Rust 1.91+** — only needed if building keypo-wallet from source ([install](https://rustup.rs/))
 
 ## Getting Started: keypo-signer
 
@@ -82,21 +81,24 @@ keypo-signer vault import --label my-vault --file .env
 
 The `vault exec` workflow is designed for AI agents — inject secrets into tool processes without exposing them in config files or shell history.
 
-### Checkout demo
+### Vault backup
 
-The [checkout demo](demo/checkout/) shows `vault exec` in a real-world scenario: an AI agent completes a Shopify purchase while your credit card stays locked behind Touch ID. The agent never sees your card details — they're injected into a headless browser process that the agent can't inspect.
+Back up vault secrets to iCloud Drive with two-factor encryption (iCloud Keychain synced key + User passphrase). Restore on any Mac signed into the same iCloud account.
 
 ```bash
-# After setup (see demo/checkout/README.md):
-demo/checkout/run-with-vault.sh https://shop.keypo.io/products/keypo-logo-art
-# Touch ID prompt appears → approve → order placed
+# Create an encrypted backup (generates passphrase on first run)
+keypo-signer vault backup
+
+# Check backup status
+keypo-signer vault backup info
+
+# Restore on a new Mac
+keypo-signer vault restore
 ```
 
-Shipping addresses are stored in the vault's open tier (no auth), card details in the biometric tier (Touch ID). No database, no API server — everything flows through `vault exec`.
+## Getting Started: keypo-wallet (optional extension)
 
-## Getting Started: keypo-wallet
-
-`keypo-wallet` turns a Mac into a programmable hardware wallet. It builds on `keypo-signer` for key management and adds smart account delegation, bundler submission, and gas sponsorship.
+keypo-wallet is an optional extension for users who want on-chain smart account capabilities. It turns a Mac into a programmable hardware wallet, building on `keypo-signer` for key management and adding smart account delegation, bundler submission, and gas sponsorship.
 
 ### 0. Prerequisites
 
@@ -158,6 +160,37 @@ keypo-wallet send --key my-key --to 0xRecipientAddress --value 1000000000000000
 
 If `paymaster_url` is configured, transactions are gas-sponsored automatically. Add `--no-paymaster` to pay gas from the wallet's ETH balance.
 
+## Demos
+
+### Checkout demo
+
+The [checkout demo](demo/checkout/) shows `vault exec` in a real-world scenario: an AI agent completes a Shopify purchase while your credit card stays locked behind Touch ID. The agent never sees your card details — they're injected into a headless browser process that the agent can't inspect.
+
+```bash
+# After setup (see demo/checkout/README.md):
+demo/checkout/run-with-vault.sh https://shop.keypo.io/products/keypo-logo-art
+# Touch ID prompt appears → approve → order placed
+```
+
+Shipping addresses are stored in the vault's open tier (no auth), card details in the biometric tier (Touch ID). No database, no API server — everything flows through `vault exec`.
+
+### Hermes checkout demo
+
+The [Hermes checkout demo](demo/hermes-checkout/) shows `vault exec` in a real-world scenartio with Hermes, an open-source AI agent built by [Nous Research](https://nousresearch.com/). This demo is an AI shopping agent with comparison shopping, taste profiles, scheduled purchases, and Telegram integration. Hermes uses the Shopify Catalog MCP server to search across stores and the `keypo-approvald` approval daemon for Touch ID-gated checkout.
+
+```bash
+# Start the approval daemon (listens on Unix socket)
+keypo-approvald &
+
+# Ask Hermes to comparison-shop
+hermes "Find me the best price on a mechanical keyboard under $150"
+
+# Scheduled shopping with taste profiles
+hermes "Remind me to buy coffee beans every 2 weeks — I like medium roast, single origin"
+```
+
+The agent never sees card details — all payment flows through `vault exec` behind Touch ID. See [demo/hermes-checkout/README.md](demo/hermes-checkout/README.md) for full setup.
+
 ## CLI Commands
 
 ### keypo-signer
@@ -177,6 +210,10 @@ If `paymaster_url` is configured, transactions are gas-sponsored automatically. 
 | `vault exec` | Run a command with secrets injected as environment variables |
 | `vault import` | Import secrets from a `.env` file |
 | `vault destroy` | Delete all vaults, keys, and secrets |
+| `vault backup` | Encrypt and back up vault secrets to iCloud Drive |
+| `vault backup info` | Show backup status (last backup date, secret count, device) |
+| `vault backup reset` | Reset backup encryption key and passphrase |
+| `vault restore` | Restore vault secrets from an iCloud Drive backup |
 
 ### keypo-wallet
 
@@ -198,7 +235,7 @@ If `paymaster_url` is configured, transactions are gas-sponsored automatically. 
 | `info` | Show account info from local state (no RPC) |
 | `balance` | Query native ETH and ERC-20 token balances |
 | **Vault** (delegates to `keypo-signer vault`) | |
-| `vault init` / `set` / `get` / `update` / `delete` / `list` / `exec` / `import` / `destroy` | Same as `keypo-signer vault` commands above |
+| `vault init` / `set` / `get` / `update` / `delete` / `list` / `exec` / `import` / `destroy` / `backup` / `backup info` / `backup reset` / `restore` | Same as `keypo-signer vault` commands above |
 
 Use `--help` on any command for detailed usage, e.g. `keypo-wallet setup --help`.
 
@@ -208,16 +245,16 @@ Global flags:
 ## Development
 
 ```bash
-# Rust (keypo-wallet)
+# Swift (keypo-signer) — core product
+cd keypo-signer && swift build
+cd keypo-signer && swift test
+
+# Rust (keypo-wallet) — optional extension
 cd keypo-wallet && cargo check
 cd keypo-wallet && cargo test
 cd keypo-wallet && cargo build
 
-# Swift (keypo-signer) — macOS only
-cd keypo-signer && swift build
-cd keypo-signer && swift test
-
-# Foundry (keypo-account) — requires Foundry
+# Foundry (keypo-account) — smart contract
 cd keypo-account && forge build
 cd keypo-account && forge test -vvv
 ```
@@ -233,7 +270,76 @@ cd keypo-wallet && cargo clippy --all-targets -- -D warnings
 
 See [CLAUDE.md](CLAUDE.md) for the documentation index and coding conventions.
 
-## Integration Tests
+## Deployments
+
+| Chain | Contract | Address |
+|---|---|---|
+| Base Sepolia (84532) | KeypoAccount | [`0x6d1566f9aAcf9c06969D7BF846FA090703A38E43`](https://sepolia.basescan.org/address/0x6d1566f9aacf9c06969d7bf846fa090703a38e43) |
+
+The address is deterministic (CREATE2) and identical across all chains.
+
+## keypo-wallet Configuration
+
+The sections below apply to keypo-wallet only. keypo-signer has no external configuration — it works standalone.
+
+### Config file (preferred)
+
+The CLI reads endpoints from `~/.keypo/config.toml`, created by `keypo-wallet init`:
+
+```toml
+[network]
+rpc_url = "https://sepolia.base.org"
+bundler_url = "https://api.pimlico.io/v2/84532/rpc?apikey=..."
+paymaster_url = "https://api.pimlico.io/v2/84532/rpc?apikey=..."
+paymaster_policy_id = "sp_clever_unus"
+```
+
+### Resolution precedence
+
+1. **CLI flag** (`--rpc`, `--bundler`, `--paymaster`, `--paymaster-policy`)
+2. **Environment variable** (`KEYPO_RPC_URL`, `KEYPO_BUNDLER_URL`, `KEYPO_PAYMASTER_URL`, `KEYPO_PAYMASTER_POLICY_ID`)
+3. **Config file** (`~/.keypo/config.toml`)
+4. **Error** (if none of the above provide a value)
+
+### Environment variables
+
+| Variable | Description |
+|---|---|
+| `KEYPO_RPC_URL` | Standard RPC endpoint |
+| `KEYPO_BUNDLER_URL` | ERC-4337 bundler endpoint |
+| `KEYPO_PAYMASTER_URL` | ERC-7677 paymaster endpoint |
+| `KEYPO_PAYMASTER_POLICY_ID` | Paymaster sponsorship policy ID |
+| `TEST_FUNDER_PRIVATE_KEY` | If set, `setup` auto-funds the new account (read directly from env) |
+
+### `.env` file (Foundry / integration tests)
+
+The `.env` file at the repo root is used by Foundry and integration tests, not by the CLI directly. Variables like `PIMLICO_API_KEY`, `BASE_SEPOLIA_RPC_URL`, `DEPLOYER_PRIVATE_KEY`, and `BASESCAN_API_KEY` live there. Foundry auto-loads `.env` via a symlink (`keypo-account/.env` -> `../.env`).
+
+### Balance query files
+
+The `balance` command accepts `--query <file.json>` for structured queries:
+
+```json
+{
+  "chains": [84532],
+  "tokens": {
+    "include": ["ETH", "0xUSDC_ADDRESS"],
+    "min_balance": "0.001"
+  },
+  "format": "table",
+  "sort_by": "balance"
+}
+```
+
+| Field | Description |
+|---|---|
+| `chains` | Array of chain IDs to query |
+| `tokens.include` | Token list — `"ETH"` for native, contract addresses for ERC-20 |
+| `tokens.min_balance` | Hide balances below this threshold |
+| `format` | Output format: `table`, `json`, `csv` |
+| `sort_by` | Sort order: `balance`, `chain`, `token` |
+
+### Integration tests
 
 Integration tests require secrets in `.env` at the repo root and access to Base Sepolia. They are marked `#[ignore]` in CI and run locally:
 
@@ -242,14 +348,6 @@ cd keypo-wallet && cargo test -- --ignored --test-threads=1
 ```
 
 The `--test-threads=1` flag prevents funder wallet nonce conflicts.
-
-## Deployments
-
-| Chain | Contract | Address |
-|---|---|---|
-| Base Sepolia (84532) | KeypoAccount | [`0x6d1566f9aAcf9c06969D7BF846FA090703A38E43`](https://sepolia.basescan.org/address/0x6d1566f9aacf9c06969d7bf846fa090703a38e43) |
-
-The address is deterministic (CREATE2) and identical across all chains.
 
 ## Skills
 
@@ -281,66 +379,6 @@ This project uses `keypo-signer` for secret management. Never use plaintext `.en
 keypo-signer vault exec --env .env.example -- <command>
 \```
 ```
-
-## Balance Query Files
-
-The `balance` command accepts `--query <file.json>` for structured queries:
-
-```json
-{
-  "chains": [84532],
-  "tokens": {
-    "include": ["ETH", "0xUSDC_ADDRESS"],
-    "min_balance": "0.001"
-  },
-  "format": "table",
-  "sort_by": "balance"
-}
-```
-
-| Field | Description |
-|---|---|
-| `chains` | Array of chain IDs to query |
-| `tokens.include` | Token list — `"ETH"` for native, contract addresses for ERC-20 |
-| `tokens.min_balance` | Hide balances below this threshold |
-| `format` | Output format: `table`, `json`, `csv` |
-| `sort_by` | Sort order: `balance`, `chain`, `token` |
-
-## Environment
-
-### Config file (preferred)
-
-The CLI reads endpoints from `~/.keypo/config.toml`, created by `keypo-wallet init`:
-
-```toml
-[network]
-rpc_url = "https://sepolia.base.org"
-bundler_url = "https://api.pimlico.io/v2/84532/rpc?apikey=..."
-paymaster_url = "https://api.pimlico.io/v2/84532/rpc?apikey=..."
-paymaster_policy_id = "sp_clever_unus"
-```
-
-### Resolution precedence
-
-1. **CLI flag** (`--rpc`, `--bundler`, `--paymaster`, `--paymaster-policy`)
-2. **Environment variable** (`KEYPO_RPC_URL`, `KEYPO_BUNDLER_URL`, `KEYPO_PAYMASTER_URL`, `KEYPO_PAYMASTER_POLICY_ID`)
-3. **Config file** (`~/.keypo/config.toml`)
-4. **Error** (if none of the above provide a value)
-
-### Environment variables
-
-| Variable | Description |
-|---|---|
-| `KEYPO_RPC_URL` | Standard RPC endpoint |
-| `KEYPO_BUNDLER_URL` | ERC-4337 bundler endpoint |
-| `KEYPO_PAYMASTER_URL` | ERC-7677 paymaster endpoint |
-| `KEYPO_PAYMASTER_POLICY_ID` | Paymaster sponsorship policy ID |
-| `TEST_FUNDER_PRIVATE_KEY` | If set, `setup` auto-funds the new account (read directly from env) |
-
-
-### `.env` file (Foundry / integration tests)
-
-The `.env` file at the repo root is used by Foundry and integration tests, not by the CLI directly. Variables like `PIMLICO_API_KEY`, `BASE_SEPOLIA_RPC_URL`, `DEPLOYER_PRIVATE_KEY`, and `BASESCAN_API_KEY` live there. Foundry auto-loads `.env` via a symlink (`keypo-account/.env` -> `../.env`).
 
 ## DISCLAIMER
 

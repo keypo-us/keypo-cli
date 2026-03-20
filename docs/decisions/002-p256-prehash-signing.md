@@ -48,7 +48,7 @@ let signature = try privateKey.signature(for: digest)  // NOT signature(for: Dat
 ## Consequences
 
 - **NEVER** use `Signer::sign()` or `signature(for: Data)` for signing ERC-4337 digests. Both apply SHA-256, causing double-hashing.
-- The `SHA256Digest` unsafe cast in Swift is safe because `SHA256Digest` is a 32-byte value type with matching memory layout. This is the only way to pass a pre-computed digest to CryptoKit's Secure Enclave API.
+- The `SHA256Digest` pointer reinterpret in Swift is sound because `SHA256Digest` is a 32-byte value type with matching memory layout. Apple provides no public initializer, so this is the only way to pass a pre-computed digest to CryptoKit's Secure Enclave API.
 - All P-256 signatures must also be low-S normalized (s <= curve_order/2). This is a separate concern but frequently co-located with the signing code.
 - This bug was discovered post-Phase-6 and caused AA24 signature errors in production. It affected both the Swift CLI and the Rust MockSigner independently.
 

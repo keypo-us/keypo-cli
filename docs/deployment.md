@@ -1,7 +1,7 @@
 ---
 title: Deployment and Secrets
 owner: "@davidblumenfeld"
-last_verified: 2026-03-05
+last_verified: 2026-03-19
 status: current
 ---
 
@@ -82,18 +82,37 @@ forge verify-contract <address> src/KeypoAccount.sol:KeypoAccount \
 | `rust.yml` | Push/PR touching `keypo-wallet/` | Fmt, check, test, clippy |
 | `swift.yml` | Push/PR touching `keypo-signer/` | Build + test on macOS |
 | `foundry.yml` | Push/PR touching `keypo-account/` | Build + test with Foundry |
-| `release-signer.yml` | `signer-v*` tag | Code-sign, notarize, create GitHub release |
+| `release.yml` | `v*` tag | Version check, tests, build, code-sign, notarize, GitHub release, Homebrew tap update |
+| `docs.yml` | Push/PR touching `docs/**`, `CLAUDE.md`, `**/README.md` | Documentation freshness checks (links, metadata, staleness) |
 
-### Release Process (keypo-signer)
+### Release Process
 
-1. Tag the commit: `git tag signer-v1.0.0 && git push --tags`
-2. `release-signer.yml` runs: builds release binary, code-signs with Developer ID, notarizes with Apple, creates GitHub release with the binary attached.
-3. Update `homebrew/Formula/keypo-signer.rb` with the new version, SHA256, and download URL.
+1. Bump version in both `keypo-wallet/Cargo.toml` and `keypo-signer/Sources/KeypoCore/Models.swift`.
+2. Tag the commit: `git tag v0.4.0 && git push --tags`.
+3. `release.yml` runs:
+   - Verifies tag version matches both `Cargo.toml` and `Models.swift`
+   - Runs Swift tests (excluding vault integration tests) and Rust tests
+   - Builds release binaries for both CLIs (arm64)
+   - Code-signs both binaries with Developer ID certificate
+   - Notarizes with Apple (up to 600s timeout)
+   - Creates `tar.gz` archive containing both binaries + SHA256
+   - Creates GitHub Release with the archive attached
+   - Triggers `update-formula.yml` in `keypo-us/homebrew-tap` with version and SHA256
 
-## Homebrew Formula
+## Homebrew Formulas
 
-The Homebrew formula is at `homebrew/Formula/keypo-signer.rb`. After a release:
+Two formulas in `homebrew/Formula/`:
 
-1. Update `version`, `url`, and `sha256` in the formula.
-2. Test locally: `brew install --build-from-source ./homebrew/Formula/keypo-signer.rb`
-3. Commit and push. Users install via `brew tap keypo-us/tap && brew install keypo-signer`.
+| Formula | Installs | Conflicts with |
+|---|---|---|
+| `keypo-wallet.rb` | Both `keypo-wallet` and `keypo-signer` binaries | `keypo-signer` |
+| `keypo-signer.rb` | `keypo-signer` binary only | `keypo-wallet` |
+
+The recommended install is `keypo-wallet` (includes both). The `keypo-signer` formula exists for users who only need vault and key management without wallet features.
+
+Formula updates are triggered automatically by `release.yml` via the `HOMEBREW_TAP_TOKEN` secret. Users install via:
+
+```bash
+brew install keypo-us/tap/keypo-wallet    # both binaries
+brew install keypo-us/tap/keypo-signer    # signer only
+```

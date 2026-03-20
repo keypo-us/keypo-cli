@@ -1,7 +1,7 @@
 ---
 title: Coding Conventions
 owner: "@davidblumenfeld"
-last_verified: 2026-03-05
+last_verified: 2026-03-19
 status: current
 ---
 
@@ -68,7 +68,7 @@ Standards and gotchas for all three languages in the monorepo. These are enforce
 
 ## Swift (keypo-signer)
 
-- **Pre-hashed signing**: Cast 32-byte input to `SHA256Digest` via unsafe memory binding, then use `signature(for: Digest)`. NEVER use `signature(for: Data)` which SHA-256 hashes the input. NEVER use `SecKeyCreateSignature` which also hashes. See [ADR-002](decisions/002-p256-prehash-signing.md).
+- **Pre-hashed signing**: Cast 32-byte input to `SHA256Digest` via pointer reinterpret (`withUnsafeBytes` + `assumingMemoryBound`) — `SHA256Digest` has no public initializer. Then use `signature(for: Digest)`. NEVER use `signature(for: Data)` which SHA-256 hashes the input. NEVER use `SecKeyCreateSignature` which also hashes. See [ADR-002](decisions/002-p256-prehash-signing.md).
 - **Key API**: Use `SecureEnclave.P256.Signing.PrivateKey` from CryptoKit (not Security framework's `SecKeyCreateSignature`).
 - **JSON encoding**: `JSONEncoder` with `outputFormatting: [.prettyPrinted, .sortedKeys]`.
 - **Application tag pattern**: `com.keypo.signer.<label>` -- this is how SE keys are looked up in the Keychain.
@@ -85,6 +85,19 @@ Standards and gotchas for all three languages in the monorepo. These are enforce
 - **Secret name validation**: `^[A-Za-z_][A-Za-z0-9_]{0,127}$`. Different from signing key label validation (`^[a-z][a-z0-9-]{0,63}$`).
 - **Vault key type**: `SecureEnclave.P256.KeyAgreement.PrivateKey` (not Signing). Used for ECDH key agreement.
 - **Vault file**: `~/.keypo/vault.json`, permissions 600. Uses POSIX `flock` for concurrent access safety.
+
+### Backup/Restore Conventions
+
+- **Two-factor key derivation**: `HKDF-SHA256(syncedKey || Argon2id(passphrase))`. Both the iCloud Keychain synced key and the passphrase are required — losing either makes the backup unrecoverable.
+- **Argon2id params**: ops=3, mem=64 MB, salt=16 bytes (random), output=32 bytes. Uses the `Sodium` package (libsodium wrapper). Algorithm: `Argon2ID13`.
+- **HKDF-SHA256 (backup)**: IKM = `syncedKey || argon2Output`, salt = 32 bytes (random), info = `"keypo-vault-backup-v1"`, output = 32 bytes. The info string is distinct from vault ECIES (`"keypo-vault-v1"`).
+- **iCloud Keychain synced key**: Service `"com.keypo.vault-backup"`, account `"backup-encryption-key"`, `kSecAttrSynchronizable: true`, `kSecAttrAccessible: afterFirstUnlock`. 256-bit random key.
+- **iCloud Drive path**: `~/Library/Mobile Documents/com~apple~CloudDocs/Keypo/vault-backup.json`.
+- **Passphrase**: 4-word Diceware (EFF short wordlist), case-sensitive. Confirmation by re-entering 2 random words from the generated passphrase.
+- **iCloud pre-flight**: Check `isSignedIntoICloud` and `isICloudDriveAvailable` before backup/restore. Fail fast with a clear error if either is unavailable.
+- **TTY detection**: `isatty(STDIN_FILENO)` determines interactive (diff display + merge prompt) vs JSON conflict output. Terminal users always get the interactive flow.
+- **Two-phase merge**: Phase A verifies HMACs for all affected vaults (triggers auth prompts — one LAContext per policy). Phase B mutates with cached LAContexts (no additional auth). This is an exception to the "one LAContext per command" rule.
+- **BackupBlob version**: Currently 1. Rejects unknown versions with `unsupportedVersion` error.
 
 ## Solidity (keypo-account)
 

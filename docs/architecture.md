@@ -1,21 +1,238 @@
 ---
 title: Architecture Overview
 owner: "@davidblumenfeld"
-last_verified: 2026-03-05
+last_verified: 2026-03-19
 status: current
 ---
 
-# Keypo Wallet Architecture
+# Architecture Overview
 
-ERC-4337 smart wallet with P-256 (Secure Enclave) signing, EIP-7702 delegation, and ERC-7821 batch execution.
+**keypo-signer** (Swift) is the core product — hardware-bound P-256 key management, encrypted vault storage, and iCloud backup, all powered by the Secure Enclave. **keypo-wallet** (Rust) is an optional extension that builds on keypo-signer to turn your Mac Secure Enclave into a programmable hardware wallet, powered by account abstraction (EIP7702 and ERC4337). 
 
-## Wallet Creation (Setup)
+## keypo-signer Architecture
+
+### Secure Enclave Key Lifecycle
+
+```
+keypo-signer create --label dave --policy biometric
+```
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│  CREATE FLOW                                                             │
+│                                                                          │
+│  1. Validate label: ^[a-z][a-z0-9-]{0,63}$                              │
+│  2. Map policy → SecAccessControl flags:                                 │
+│       open      → (none)                                                 │
+│       passcode  → .devicePasscode                                        │
+│       biometric → .biometryCurrentSet                                    │
+│                                                                          │
+│  3. Create key:                                                          │
+│     SecureEnclave.P256.Signing.PrivateKey(                               │
+│       accessControl: flags,                                              │
+│       authenticationContext: LAContext()                                  │
+│     )                                                                    │
+│     → Private key stays in Secure Enclave hardware (never extractable)   │
+│     → Stored in Keychain with tag: com.keypo.signer.<label>              │
+│                                                                          │
+│  4. Save metadata to ~/.keypo/keys.json:                                 │
+│     { label, publicKey (x963 hex), policy, createdAt, signCount }        │
+│                                                                          │
+│  5. Return JSON: { qx, qy } (uncompressed public key coordinates)       │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+```
+SIGN FLOW
+
+┌──────────────┐     32-byte hex digest      ┌─────────────────┐
+│  Caller      │────────────────────────────▶│  keypo-signer   │
+│              │                              │                 │
+│              │                              │  1. Load SE key │
+│              │                              │     by tag      │
+│              │                              │                 │
+│              │                              │  2. Cast 32B →  │
+│              │                              │     SHA256Digest │
+│              │                              │     (pointer    │
+│              │                              │      reinterpret│
+│              │                              │      — no public│
+│              │                              │      init)      │
+│              │                              │                 │
+│              │     { r, s }                 │  3. Sign digest │
+│              │◀────────────────────────────│     (no rehash) │
+│              │                              │                 │
+│              │                              │  4. Low-S       │
+│              │                              │     normalize:  │
+│              │                              │     if s > n/2  │
+│              │                              │     then s=n-s  │
+└──────────────┘                              └─────────────────┘
+
+Pre-hash signing is critical — CryptoKit's signature(for: Data) would
+SHA-256 the input again, breaking on-chain P-256 verification.
+See ADR-002.
+```
+
+### Vault Encryption (ECIES)
+
+Secrets are encrypted per-entry using ECIES with Secure Enclave key agreement keys. Secrets never exist on disk in plaintext.
+
+```
+ENCRYPT (vault set)
+
+┌───────────────────────────────────────────────────────────────────────┐
+│                                                                       │
+│  1. Generate ephemeral P256.KeyAgreement.PrivateKey (in software)     │
+│                                                                       │
+│  2. ECDH: ephemeralPrivate × SE_public_key → sharedSecret             │
+│                                                                       │
+│  3. HKDF-SHA256:                                                      │
+│       IKM:  sharedSecret                                              │
+│       salt: (empty)                                                   │
+│       info: "keypo-vault-v1" || secret_name (UTF-8 bytes)             │
+│       output: 32 bytes (256-bit symmetric key)                        │
+│                                                                       │
+│  4. AES-256-GCM seal(plaintext, key)                                  │
+│                                                                       │
+│  5. Store in ~/.keypo/vault.json:                                     │
+│     {                                                                 │
+│       "ephemeralPublicKey": <x963 base64>,                            │
+│       "nonce": <12 bytes base64>,                                     │
+│       "ciphertext": <base64>,                                         │
+│       "tag": <16 bytes base64>,                                       │
+│       "createdAt": <ISO 8601>,                                        │
+│       "updatedAt": <ISO 8601>                                         │
+│     }                                                                 │
+└───────────────────────────────────────────────────────────────────────┘
+
+
+DECRYPT (vault get)
+
+┌───────────────────────────────────────────────────────────────────────┐
+│                                                                       │
+│  1. Load SE KeyAgreement private key (with LAContext for auth)         │
+│     Tag: com.keypo.vault.<policy>                                     │
+│     Policy gate: biometric → Touch ID, passcode → device passcode     │
+│                                                                       │
+│  2. Reconstruct ephemeral public key from stored x963 bytes           │
+│                                                                       │
+│  3. ECDH: SE_private_key × ephemeralPublic → sharedSecret             │
+│                                                                       │
+│  4. HKDF-SHA256 (same params as encrypt)                              │
+│                                                                       │
+│  5. AES-256-GCM open(nonce, ciphertext, tag, key) → plaintext         │
+│                                                                       │
+│  6. Zeroize plaintext after use                                       │
+└───────────────────────────────────────────────────────────────────────┘
+```
+
+**HMAC integrity envelope**: Before any vault mutation, the HMAC is verified. Key derivation: ECDH with SE key → HKDF-SHA256 (info: `"keypo-vault-integrity-v1"`) → HMAC-SHA256 over canonical JSON (`.sortedKeys` formatting). This detects tampering or corruption before any write.
+
+**Vault file**: `~/.keypo/vault.json`, permissions 600. Per-policy vaults with encrypted secrets. POSIX `flock` for concurrent access safety.
+
+### Vault Key Types
+
+The Secure Enclave holds two distinct P-256 key types:
+
+| Purpose | Key Type | Keychain Tag |
+|---|---|---|
+| Signing (create/sign/verify) | `P256.Signing.PrivateKey` | `com.keypo.signer.<label>` |
+| Vault encryption (ECDH) | `P256.KeyAgreement.PrivateKey` | `com.keypo.vault.<policy>` |
+
+Signing keys are per-label (user-named). Vault keys are per-policy (one per access tier). Both are hardware-bound and non-extractable.
+
+### Backup/Restore Crypto
+
+```
+BACKUP (vault backup)
+
+┌───────────────────────────────────────────────────────────────────────┐
+│                                                                       │
+│  Pre-flight: verify iCloud sign-in + iCloud Drive + iCloud Keychain   │
+│                                                                       │
+│  1. Generate or retrieve synced key (256-bit random):                 │
+│     Stored in iCloud Keychain:                                        │
+│       service: "com.keypo.vault-backup"                               │
+│       kSecAttrSynchronizable: true                                    │
+│       kSecAttrAccessible: afterFirstUnlock                            │
+│                                                                       │
+│  2. Generate passphrase: 4-word Diceware (EFF short wordlist)         │
+│     Case-sensitive, confirmation by re-entering 2 random words        │
+│                                                                       │
+│  3. Generate random salts:                                            │
+│     argon2Salt: 16 bytes                                              │
+│     hkdfSalt:   32 bytes                                              │
+│                                                                       │
+│  4. Key derivation (two-factor):                                      │
+│     a. Argon2id(passphrase, argon2Salt)                               │
+│        ops: 3, mem: 64 MB, output: 32 bytes                           │
+│        (via libsodium / Sodium package)                               │
+│                                                                       │
+│     b. HKDF-SHA256:                                                   │
+│        IKM:  syncedKey || argon2Output                                │
+│        salt: hkdfSalt                                                 │
+│        info: "keypo-vault-backup-v1"                                  │
+│        output: 32 bytes (backup encryption key)                       │
+│                                                                       │
+│  5. Serialize all vault secrets → BackupPayload JSON                  │
+│                                                                       │
+│  6. AES-256-GCM seal(payload, backupKey)                              │
+│                                                                       │
+│  7. Write BackupBlob to iCloud Drive:                                 │
+│     ~/Library/Mobile Documents/com~apple~CloudDocs/                   │
+│       Keypo/vault-backup.json                                         │
+│     { version: 1, deviceName, argon2Salt, hkdfSalt,                  │
+│       nonce, ciphertext, authTag, secretCount, vaultNames }           │
+│                                                                       │
+│  Two-factor security: both the synced key (iCloud Keychain)           │
+│  AND the passphrase are required to decrypt. Losing either one        │
+│  makes the backup unrecoverable.                                      │
+└───────────────────────────────────────────────────────────────────────┘
+
+
+RESTORE (vault restore)
+
+┌───────────────────────────────────────────────────────────────────────┐
+│                                                                       │
+│  1. Read BackupBlob from iCloud Drive                                 │
+│     Reject if version != 1                                            │
+│                                                                       │
+│  2. Retrieve synced key from iCloud Keychain                          │
+│     Prompt for passphrase                                             │
+│                                                                       │
+│  3. Derive backup key (same Argon2id + HKDF as backup)                │
+│                                                                       │
+│  4. AES-256-GCM open → BackupPayload                                  │
+│                                                                       │
+│  5. Compute diff:                                                     │
+│     localOnly  — secrets only on this device                          │
+│     backupOnly — secrets only in backup                               │
+│     inBoth     — secrets on both (local version wins on merge)        │
+│                                                                       │
+│  6. Output depends on TTY detection (isatty(STDIN_FILENO)):           │
+│     TTY:  interactive diff display + merge/replace/cancel prompt      │
+│     Pipe: JSON conflict output for scripted consumption               │
+│                                                                       │
+│  7. Two-phase merge:                                                  │
+│     Phase A: verify HMACs for all affected vaults                     │
+│              (triggers auth prompts — one LAContext per policy)        │
+│     Phase B: mutate vault with cached LAContexts                      │
+│              (no additional auth prompts)                              │
+└───────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## keypo-wallet Architecture
+
+keypo-wallet (Rust) builds on keypo-signer — it shells out to the Swift CLI for all Secure Enclave operations (key creation, signing, vault access). Everything above applies as the foundation layer.
+
+### Wallet Creation (Setup)
 
 ```
 keypo-wallet setup --key dave --rpc https://sepolia.base.org
 ```
 
-### Step 1: Create or retrieve P-256 key
+#### Step 1: Create or retrieve P-256 key
 
 ```
 ┌──────────────┐         ┌──────────────────┐         ┌─────────────────┐
@@ -24,13 +241,13 @@ keypo-wallet setup --key dave --rpc https://sepolia.base.org
 └──────────────┘         └──────────────────┘         └─────────────────┘
                           create --label dave           Generates P-256
                           --policy biometric            private key.
-                                                        Never leaves
+                                                       Never leaves
                           Returns: { qx, qy }           the hardware.
 ```
 
 The P-256 public key (qx, qy) is returned. The private key stays in the Secure Enclave permanently — no software, not even the OS, can extract it.
 
-### Step 2: Generate ephemeral EOA
+#### Step 2: Generate ephemeral EOA
 
 ```
 ┌──────────────┐
@@ -42,7 +259,7 @@ The P-256 public key (qx, qy) is returned. The private key stays in the Secure E
 
 This key exists only for this setup transaction. It's discarded after.
 
-### Step 3: Fund the EOA
+#### Step 3: Fund the EOA
 
 ```
 ┌──────────────┐                              ┌──────────────┐
@@ -56,7 +273,7 @@ This key exists only for this setup transaction. It's discarded after.
   - User manually sends ETH (CLI waits, polling every 5s)
 ```
 
-### Step 4: Send the EIP-7702 setup transaction
+#### Step 4: Send the EIP-7702 setup transaction
 
 This is a single type-4 transaction that does two things atomically:
 
@@ -78,7 +295,7 @@ This is a single type-4 transaction that does two things atomically:
 └──────────────┘                              └──────────────────────────┘
 ```
 
-### Step 5: Verify and save
+#### Step 5: Verify and save
 
 ```
 ┌──────────────┐                              ┌──────────────┐
@@ -101,7 +318,7 @@ This is a single type-4 transaction that does two things atomically:
   0xD88E is now permanently controlled by the P-256 key.
 ```
 
-### After setup — what the account looks like on-chain
+#### After setup — what the account looks like on-chain
 
 ```
 ┌─────────────────────────────────────────────────┐
@@ -133,14 +350,14 @@ This is a single type-4 transaction that does two things atomically:
 
 ---
 
-## Using the Wallet (Sending a Transaction)
+### Using the Wallet (Sending a Transaction)
 
 ```
 keypo-wallet send --key dave --to 0xBob --value 1000000000000000 \
   --bundler https://api.pimlico.io/...  --rpc https://sepolia.base.org
 ```
 
-### Step 1: Build the UserOperation
+#### Step 1: Build the UserOperation
 
 ```
 ┌──────────────┐                              ┌──────────────┐
@@ -164,7 +381,7 @@ keypo-wallet send --key dave --to 0xBob --value 1000000000000000 \
 └──────────────┘
 ```
 
-### Step 2: Estimate gas
+#### Step 2: Estimate gas
 
 ```
 ┌──────────────┐                              ┌──────────────┐
@@ -178,7 +395,7 @@ keypo-wallet send --key dave --to 0xBob --value 1000000000000000 \
 └──────────────┘
 ```
 
-### Step 3: Sign with Secure Enclave
+#### Step 3: Sign with Secure Enclave
 
 ```
 ┌──────────────┐                                        ┌─────────────────┐
@@ -198,7 +415,7 @@ keypo-wallet send --key dave --to 0xBob --value 1000000000000000 \
 └──────────────┘
 ```
 
-### Step 4: Submit to bundler
+#### Step 4: Submit to bundler
 
 ```
 ┌──────────────┐                              ┌──────────────┐
@@ -247,7 +464,7 @@ keypo-wallet send --key dave --to 0xBob --value 1000000000000000 \
 └──────────────┘
 ```
 
-### With a paymaster (gas sponsorship)
+#### With a paymaster (gas sponsorship)
 
 Same flow, but before signing:
 
@@ -270,21 +487,44 @@ Same flow, but before signing:
 
 ---
 
-## Component Overview
+## Full System Overview
 
 ```
-┌──────────┐    ┌──────────────┐    ┌───────────┐    ┌───────────┐    ┌──────────┐
-│  Secure  │    │ keypo-wallet │    │  Bundler  │    │ EntryPoint│    │   Your   │
-│  Enclave │    │   (CLI)      │    │ (Pimlico) │    │ (on-chain)│    │  Account │
-│          │    │              │    │           │    │           │    │ (0xD88E) │
-│  Holds   │    │  Builds      │    │ Packages  │    │ Validates │    │          │
-│  P-256   │    │  UserOps,    │    │ UserOps   │    │ signature │    │ Executes │
-│  private │    │  requests    │    │ into txs, │    │ via P-256 │    │ the call │
-│  key     │    │  signatures  │    │ submits   │    │ on-chain  │    │          │
-│          │    │              │    │ to chain  │    │ precompile│    │          │
-└──────────┘    └──────────────┘    └───────────┘    └───────────┘    └──────────┘
-  Hardware        Your machine        Off-chain        On-chain        On-chain
-  (never leaves)
+┌─────────────────────────────────────────────────────────────────────────┐
+│  keypo-signer (Swift)                                                   │
+│                                                                         │
+│  ┌──────────┐   ┌──────────────┐   ┌──────────────┐   ┌─────────────┐ │
+│  │  Secure  │   │  Key Mgmt    │   │  Vault       │   │  Backup     │ │
+│  │  Enclave │   │              │   │  (ECIES)     │   │  (Argon2id  │ │
+│  │          │   │  create      │   │              │   │   + HKDF    │ │
+│  │  P-256   │   │  sign        │   │  set/get     │   │   + AES)   │ │
+│  │  Signing │   │  verify      │   │  exec        │   │             │ │
+│  │  + Key   │   │  rotate      │   │  import      │   │  iCloud    │ │
+│  │  Agree-  │   │  delete      │   │              │   │  Keychain  │ │
+│  │  ment    │   │              │   │  HMAC        │   │  + Drive   │ │
+│  │  keys    │   │  ~/.keypo/   │   │  integrity   │   │             │ │
+│  │          │   │  keys.json   │   │              │   │  vault-    │ │
+│  │  (never  │   │              │   │  ~/.keypo/   │   │  backup    │ │
+│  │  leaves  │   │              │   │  vault.json  │   │  .json     │ │
+│  │  HW)     │   │              │   │              │   │             │ │
+│  └──────────┘   └──────────────┘   └──────────────┘   └─────────────┘ │
+└────────────────────────────┬────────────────────────────────────────────┘
+                             │ shell out (JSON over stdout)
+┌────────────────────────────▼────────────────────────────────────────────┐
+│  keypo-wallet (Rust)                                                    │
+│                                                                         │
+│  ┌──────────────┐   ┌───────────┐   ┌───────────┐   ┌──────────────┐  │
+│  │  Account     │   │  Bundler  │   │ EntryPoint│   │  Your        │  │
+│  │  Setup       │   │ (Pimlico) │   │ (on-chain)│   │  Account     │  │
+│  │              │   │           │   │           │   │  (0xD88E)    │  │
+│  │  EIP-7702   │   │  Packages │   │ Validates │   │              │  │
+│  │  delegation  │   │  UserOps  │   │ signature │   │  Executes    │  │
+│  │  + P-256    │   │  into txs │   │ via P-256 │   │  the call    │  │
+│  │  key reg    │   │           │   │ precompile│   │              │  │
+│  └──────────────┘   └───────────┘   └───────────┘   └──────────────┘  │
+│                                                                         │
+│  ~/.keypo/accounts.json    ~/.keypo/config.toml                         │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
-The key security property: the only component that touches the private key is the Secure Enclave hardware. Everything else works with public keys, hashes, and signatures.
+The key security property: the only component that touches private keys is the Secure Enclave hardware. Everything else works with public keys, hashes, and signatures.

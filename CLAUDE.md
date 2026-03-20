@@ -1,30 +1,31 @@
 # CLAUDE.md -- keypo-cli monorepo
 
-A macOS CLI for hardware-bound key management and encrypted secret storage using Secure Enclave P-256 keys. Includes a smart wallet (EIP-7702 + ERC-4337) and an encrypted vault. Three languages: Rust (wallet CLI), Swift (signer CLI), Solidity (smart account). Apple Silicon only.
+Hardware-bound key management and encrypted secret storage using Secure Enclave P-256 keys. keypo-signer (Swift) is the core product — create keys, sign digests, encrypt secrets, back up to iCloud. keypo-wallet (Rust) is an optional extension that adds ERC-4337 smart account operations. Solidity smart account contract. Apple Silicon only.
 
 ## Repo Structure
 
 | Directory | Description |
 |---|---|
+| `keypo-signer/` | Swift CLI -- Secure Enclave P-256 key management, encrypted vault, iCloud backup (core product) |
+| `keypo-wallet/` | Rust crate + CLI -- ERC-4337 smart account setup, signing, bundler, queries (optional extension) |
 | `keypo-account/` | Foundry -- Solidity smart account (ERC-4337 v0.7, P-256, ERC-7821) |
-| `keypo-wallet/` | Rust crate + CLI -- setup, signing, bundler, queries |
-| `keypo-signer/` | Swift CLI -- Secure Enclave P-256 key management and encrypted secret storage |
+| `demo/hermes-checkout/` | Hermes agent demo -- comparison shopping, taste profiles, Telegram |
 | `homebrew/` | Homebrew tap formula |
 | `deployments/` | Per-chain deployment records (JSON) |
 | `tests/` | Integration tests + WebAuthn test frontend |
 | `skills/` | Claude Code agent skills (npm: keypo-skills) |
-| `.github/workflows/` | CI: rust.yml, swift.yml, foundry.yml, release.yml |
+| `.github/workflows/` | CI: rust.yml, swift.yml, foundry.yml, release.yml, docs.yml |
 
 ## Build / Test / Lint
 
 ```bash
-# Rust
-cd keypo-wallet && cargo check && cargo test && cargo clippy --all-targets -- -D warnings
-
-# Swift (macOS only)
+# Swift (keypo-signer — core product)
 cd keypo-signer && swift build && swift test
 
-# Foundry
+# Rust (keypo-wallet — optional extension)
+cd keypo-wallet && cargo check && cargo test && cargo clippy --all-targets -- -D warnings
+
+# Foundry (keypo-account — smart contract)
 cd keypo-account && forge build && forge test -vvv
 
 # Integration tests (requires .env secrets + Base Sepolia access)
