@@ -1020,6 +1020,53 @@ async fn run_send(
         .parse()
         .map_err(|e| format!("invalid --to address: {e}"))?;
 
+    let wallet_addr: Address = wallet
+        .address
+        .parse()
+        .map_err(|e| format!("invalid wallet address: {e}"))?;
+
+    // Pre-flight checks: balance and spending limit
+    let balance = keypo_pay::token::query_balance(&client, &rpc_url, token_addr, wallet_addr).await?;
+    if amount_wei > balance {
+        let bal_display = keypo_pay::token::format_token_amount(balance, decimals);
+        let amt_display = keypo_pay::token::format_token_amount(amount_wei, decimals);
+        return Err(format!(
+            "insufficient balance: you have {} {} but tried to send {} {}",
+            bal_display, token_str, amt_display, token_str
+        ).into());
+    }
+
+    if let Some(name) = key_name {
+        let access_keys = config::load_access_keys()?;
+        let entry = access_keys.keys.iter().find(|k| k.name == name).unwrap();
+        let key_addr: Address = entry.address.parse().map_err(|e| format!("{e}"))?;
+
+        // Check on-chain authorization
+        let key_status = keypo_pay::access_key::query_key_status(
+            &client, &rpc_url, wallet_addr, key_addr,
+        ).await?;
+        if key_status.is_none() {
+            return Err(format!(
+                "access key '{}' is not authorized on-chain. Run 'keypo-pay access-key authorize --name {}'",
+                name, name
+            ).into());
+        }
+
+        // Check spending limit
+        let remaining = keypo_pay::access_key::query_remaining_limit(
+            &client, &rpc_url, wallet_addr, key_addr, token_addr,
+        ).await?;
+        if amount_wei > remaining {
+            let rem_display = keypo_pay::token::format_token_amount(remaining, decimals);
+            let amt_display = keypo_pay::token::format_token_amount(amount_wei, decimals);
+            return Err(format!(
+                "spending limit exceeded: access key '{}' has {} {} remaining but you tried to send {} {}\n  \
+                 Hint: update the limit with 'keypo-pay access-key update-limit --name {} --token {} --limit <amount>'",
+                name, rem_display, token_str, amt_display, token_str, name, token_str
+            ).into());
+        }
+    }
+
     // Build TIP-20 transfer call
     let calldata = keypo_pay::transaction::encode_tip20_transfer(to_addr, amount_wei);
     let call = TempoCall {
@@ -1037,10 +1084,6 @@ async fn run_send(
             .iter()
             .find(|k| k.name == name)
             .unwrap(); // safe: validated above
-        let wallet_addr: Address = wallet
-            .address
-            .parse()
-            .map_err(|e| format!("invalid wallet address: {e}"))?;
         (
             entry
                 .key_id
