@@ -53,7 +53,7 @@ pub async fn send_tempo_tx(
     // Contract calls: ~100,000 per call with data (TIP-20 transfer)
     // The testnet transaction we observed used 0x8a210 = 565,776 for a mint
     let base_gas: u64 = if root_address.is_some() { 29_000 } else { 26_000 };
-    let auth_gas: u64 = if key_authorization.is_some() { 500_000 } else { 0 }; // key auth is expensive
+    let auth_gas: u64 = if key_authorization.is_some() { 800_000 } else { 0 }; // key auth is expensive (~788K observed)
     let call_gas: u64 = calls.iter().map(|c| {
         if c.data.is_empty() { 21_000 } else { 200_000 }
     }).sum();
