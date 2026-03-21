@@ -13,7 +13,8 @@ pub trait P256Signer: Send + Sync {
     fn create_key(&self, label: &str, policy: &str) -> Result<P256PublicKey>;
 
     /// Signs a 32-byte digest with the key identified by label.
-    fn sign(&self, digest: &[u8; 32], label: &str) -> Result<P256Signature>;
+    /// `bio_reason` is shown in the Touch ID prompt for biometric-gated keys.
+    fn sign(&self, digest: &[u8; 32], label: &str, bio_reason: Option<&str>) -> Result<P256Signature>;
 
     /// Lists all managed keys.
     fn list_keys(&self) -> Result<Vec<KeyInfo>>;
@@ -145,10 +146,15 @@ impl P256Signer for KeypoSigner {
         parse_public_key(pk_hex)
     }
 
-    fn sign(&self, digest: &[u8; 32], label: &str) -> Result<P256Signature> {
+    fn sign(&self, digest: &[u8; 32], label: &str, bio_reason: Option<&str>) -> Result<P256Signature> {
         let hex_digest = format!("0x{}", hex::encode(digest));
-        let output =
-            self.run_command(&["sign", &hex_digest, "--key", label, "--format", "json"])?;
+        let mut args = vec!["sign", &hex_digest, "--key", label, "--format", "json"];
+        let reason_owned;
+        if let Some(reason) = bio_reason {
+            reason_owned = reason.to_string();
+            args.extend(["--bio-reason", &reason_owned]);
+        }
+        let output = self.run_command(&args)?;
 
         let r_hex = output["r"]
             .as_str()
@@ -247,7 +253,7 @@ pub mod mock {
             Ok(self.add_key(label, policy))
         }
 
-        fn sign(&self, digest: &[u8; 32], label: &str) -> Result<P256Signature> {
+        fn sign(&self, digest: &[u8; 32], label: &str, _bio_reason: Option<&str>) -> Result<P256Signature> {
             let keys = self.keys.lock().unwrap();
             let (sk, _) = keys
                 .get(label)
@@ -327,7 +333,7 @@ mod tests {
         assert_ne!(pk.qy, B256::ZERO);
 
         let digest = [0x42u8; 32];
-        let sig = signer.sign(&digest, "test").unwrap();
+        let sig = signer.sign(&digest, "test", None).unwrap();
         assert_ne!(sig.r, B256::ZERO);
         assert_ne!(sig.s, B256::ZERO);
     }

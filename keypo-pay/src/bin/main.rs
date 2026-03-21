@@ -679,6 +679,7 @@ async fn run_access_key_authorize(
         data: Bytes::new(),
     };
 
+    let bio = format!("Authorize access key '{name}' with spending limits");
     let result = keypo_pay::transaction::send_tempo_tx(
         &rpc_url,
         &wallet,
@@ -687,6 +688,7 @@ async fn run_access_key_authorize(
         root_label,
         None, // root key signs (P-256 signature)
         Some(signed_auth),
+        Some(&bio),
     )
     .await?;
 
@@ -856,6 +858,7 @@ async fn run_access_key_revoke(
         .strip_prefix("com.keypo.signer.")
         .unwrap_or(&wallet.root_key_id);
 
+    let bio = format!("Revoke access key '{name}'");
     let result = keypo_pay::transaction::send_tempo_tx(
         &rpc_url,
         &wallet,
@@ -864,6 +867,7 @@ async fn run_access_key_revoke(
         root_label,
         None,
         None,
+        Some(&bio),
     )
     .await?;
 
@@ -924,6 +928,7 @@ async fn run_access_key_update_limit(
         .strip_prefix("com.keypo.signer.")
         .unwrap_or(&wallet.root_key_id);
 
+    let bio = format!("Update spending limit for '{name}': {limit} {token}");
     let result = keypo_pay::transaction::send_tempo_tx(
         &rpc_url,
         &wallet,
@@ -932,6 +937,7 @@ async fn run_access_key_update_limit(
         root_label,
         None,
         None,
+        Some(&bio),
     )
     .await?;
 
@@ -1101,6 +1107,7 @@ async fn run_send(
         (label.to_string(), None)
     };
 
+    let bio = format!("Send {} {} to {}", amount, token_str, to);
     let result = keypo_pay::transaction::send_tempo_tx(
         &rpc_url,
         &wallet,
@@ -1109,6 +1116,7 @@ async fn run_send(
         &signing_label,
         root_address,
         None,
+        Some(&bio),
     )
     .await?;
 
@@ -1339,6 +1347,7 @@ async fn run_tx_send(
         (label.to_string(), None)
     };
 
+    let bio = format!("Send {} {} to {}", amount, token, to);
     let result = keypo_pay::transaction::send_tempo_tx(
         &rpc_url,
         &wallet,
@@ -1347,6 +1356,7 @@ async fn run_tx_send(
         &signing_label,
         root_address,
         None,
+        Some(&bio),
     )
     .await?;
 

@@ -287,7 +287,8 @@ pub fn sign_and_encode_authorization(
     root_key_label: &str,
 ) -> Result<Vec<u8>> {
     let digest = authorization_digest(auth);
-    let sig = signer.sign(&digest, root_key_label)?;
+    let reason = format!("Authorize access key {}", auth.key_id);
+    let sig = signer.sign(&digest, root_key_label, Some(&reason))?;
     let pub_key = signer.get_public_key(root_key_label)?;
     // Format as P-256 signature (type 0x01, pre_hash = false)
     let sig_bytes = crate::signature::format_p256_signature(&sig, &pub_key, false);

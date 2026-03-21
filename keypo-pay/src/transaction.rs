@@ -23,6 +23,7 @@ pub struct TxResult {
 /// If `root_address` is `Some`, the transaction is signed with an access key
 /// (Keychain signature format 0x03). If `None`, signed with the root key
 /// (P-256 signature format 0x01).
+#[allow(clippy::too_many_arguments)]
 pub async fn send_tempo_tx(
     rpc_url: &str,
     wallet: &WalletConfig,
@@ -31,6 +32,7 @@ pub async fn send_tempo_tx(
     signing_key_label: &str,
     root_address: Option<Address>,
     key_authorization: Option<Vec<u8>>,
+    bio_reason: Option<&str>,
 ) -> Result<TxResult> {
     let client = reqwest::Client::new();
     let sender_address: Address = wallet.address.parse()
@@ -95,7 +97,7 @@ pub async fn send_tempo_tx(
 
     // Sign
     let hash_bytes: &[u8; 32] = effective_hash.as_ref();
-    let sig = signer.sign(hash_bytes, signing_key_label)?;
+    let sig = signer.sign(hash_bytes, signing_key_label, bio_reason)?;
     let pub_key = signer.get_public_key(signing_key_label)?;
 
     // Format signature (pre_hash = false per Tempo Protocol Reference)

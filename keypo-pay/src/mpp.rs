@@ -297,6 +297,7 @@ pub async fn pay_charge(
         .next_back()
         .unwrap_or(&access_key.key_id);
 
+    let bio = format!("Pay {} for {}", challenge.amount, url);
     let tx_result = transaction::send_tempo_tx(
         rpc_url,
         wallet,
@@ -305,6 +306,7 @@ pub async fn pay_charge(
         ak_label,
         Some(wallet_addr),
         None,
+        Some(&bio),
     )
     .await?;
 
