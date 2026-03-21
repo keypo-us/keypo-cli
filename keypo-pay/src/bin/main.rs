@@ -663,7 +663,11 @@ async fn run_access_key_authorize(
         .strip_prefix("com.keypo.signer.")
         .unwrap_or(&wallet.root_key_id);
     // Sign and encode authorization
-    let signed_auth = access_key::sign_and_encode_authorization(&auth, &signer, root_label)?;
+    let limits_desc: Vec<String> = tokens.iter().zip(limits.iter())
+        .map(|(t, l)| format!("{l} {t}"))
+        .collect();
+    let bio = format!("Authorize access key '{}': {}", name, limits_desc.join(", "));
+    let signed_auth = access_key::sign_and_encode_authorization(&auth, &signer, root_label, Some(&bio))?;
 
     // Send a transaction signed by the root key, carrying the key_authorization field.
     // The root key signs the transaction that includes the authorization.
@@ -678,11 +682,6 @@ async fn run_access_key_authorize(
         value: U256::ZERO,
         data: Bytes::new(),
     };
-
-    let limits_desc: Vec<String> = tokens.iter().zip(limits.iter())
-        .map(|(t, l)| format!("{l} {t}"))
-        .collect();
-    let bio = format!("Authorize access key '{}': {}", name, limits_desc.join(", "));
     let result = keypo_pay::transaction::send_tempo_tx(
         &rpc_url,
         &wallet,
