@@ -679,7 +679,10 @@ async fn run_access_key_authorize(
         data: Bytes::new(),
     };
 
-    let bio = format!("Authorize access key '{name}' with spending limits");
+    let limits_desc: Vec<String> = tokens.iter().zip(limits.iter())
+        .map(|(t, l)| format!("{l} {t}"))
+        .collect();
+    let bio = format!("Authorize access key '{}': {}", name, limits_desc.join(", "));
     let result = keypo_pay::transaction::send_tempo_tx(
         &rpc_url,
         &wallet,
@@ -1107,7 +1110,8 @@ async fn run_send(
         (label.to_string(), None)
     };
 
-    let bio = format!("Send {} {} to {}", amount, token_str, to);
+    let to_short = if to.len() > 12 { format!("{}...{}", &to[..6], &to[to.len()-4..]) } else { to.to_string() };
+    let bio = format!("Send {} {} to {}", amount, token_str, to_short);
     let result = keypo_pay::transaction::send_tempo_tx(
         &rpc_url,
         &wallet,
@@ -1347,7 +1351,8 @@ async fn run_tx_send(
         (label.to_string(), None)
     };
 
-    let bio = format!("Send {} {} to {}", amount, token, to);
+    let to_short = if to.len() > 12 { format!("{}...{}", &to[..6], &to[to.len()-4..]) } else { to.to_string() };
+    let bio = format!("Send {} {} to {}", amount, token, to_short);
     let result = keypo_pay::transaction::send_tempo_tx(
         &rpc_url,
         &wallet,
