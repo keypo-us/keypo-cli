@@ -1,7 +1,7 @@
 class KeypoWallet < Formula
   desc "ERC-4337 smart wallet CLI with Secure Enclave P-256 signing"
   homepage "https://github.com/keypo-us/keypo-cli"
-  version "0.4.1"
+  version "0.4.2"
   license "MIT"
 
   url "https://github.com/keypo-us/keypo-cli/releases/download/v#{version}/keypo-wallet-#{version}-macos-arm64.tar.gz"
@@ -12,7 +12,8 @@ class KeypoWallet < Formula
 
   def install
     bin.install "keypo-wallet"
-    bin.install "keypo-signer"
+    prefix.install "keypo-signer.app"
+    bin.install_symlink prefix/"keypo-signer.app/Contents/MacOS/keypo-signer"
   end
 
   def caveats

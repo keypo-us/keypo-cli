@@ -1,7 +1,7 @@
 class KeypoSigner < Formula
   desc "Manage P-256 signing keys in the Apple Secure Enclave"
   homepage "https://github.com/keypo-us/keypo-cli"
-  version "0.4.1"
+  version "0.4.2"
   license "MIT"
 
   url "https://github.com/keypo-us/keypo-cli/releases/download/v#{version}/keypo-wallet-#{version}-macos-arm64.tar.gz"
@@ -18,7 +18,8 @@ class KeypoSigner < Formula
   conflicts_with "keypo-wallet", because: "keypo-wallet includes keypo-signer"
 
   def install
-    bin.install "keypo-signer"
+    prefix.install "keypo-signer.app"
+    bin.install_symlink prefix/"keypo-signer.app/Contents/MacOS/keypo-signer"
   end
 
   def caveats
