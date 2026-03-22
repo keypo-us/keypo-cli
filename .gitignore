@@ -15,6 +15,7 @@ keypo-account/.env
 
 # Rust
 keypo-wallet/target/
+keypo-pay/target/
 
 # Swift
 keypo-signer/.build/

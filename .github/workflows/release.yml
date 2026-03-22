@@ -58,6 +58,15 @@ jobs:
         working-directory: keypo-signer
         run: swift build -c release
 
+      - name: Bundle keypo-signer .app
+        run: |
+          APP="keypo-signer/keypo-signer.app"
+          # Update Info.plist version
+          plutil -replace CFBundleVersion -string "$VERSION" "$APP/Contents/Info.plist"
+          plutil -replace CFBundleShortVersionString -string "$VERSION" "$APP/Contents/Info.plist"
+          # Copy fresh binary into bundle
+          cp keypo-signer/.build/release/keypo-signer "$APP/Contents/MacOS/keypo-signer"
+
       - name: Build Rust release
         working-directory: keypo-wallet
         run: cargo build --release
@@ -94,8 +103,10 @@ jobs:
           DEVELOPER_ID_CERT_NAME: ${{ secrets.DEVELOPER_ID_CERT_NAME }}
         run: |
           codesign --force --sign "$DEVELOPER_ID_CERT_NAME" \
-            --options runtime --timestamp keypo-signer/.build/release/keypo-signer
-          codesign --verify --deep --strict keypo-signer/.build/release/keypo-signer
+            --options runtime --timestamp \
+            --entitlements keypo-signer/keypo-signer.entitlements \
+            keypo-signer/keypo-signer.app
+          codesign --verify --deep --strict keypo-signer/keypo-signer.app
 
           codesign --force --sign "$DEVELOPER_ID_CERT_NAME" \
             --options runtime --timestamp keypo-wallet/target/release/keypo-wallet
@@ -108,7 +119,7 @@ jobs:
           NOTARIZATION_APP_PASSWORD: ${{ secrets.NOTARIZATION_APP_PASSWORD }}
         run: |
           mkdir -p notarize-staging
-          cp keypo-signer/.build/release/keypo-signer notarize-staging/
+          cp -R keypo-signer/keypo-signer.app notarize-staging/
           cp keypo-wallet/target/release/keypo-wallet notarize-staging/
           ditto -c -k notarize-staging keypo-binaries.zip
 
@@ -135,7 +146,7 @@ jobs:
           ARCHIVE="keypo-wallet-${VERSION}-macos-arm64.tar.gz"
           mkdir -p staging
           cp keypo-wallet/target/release/keypo-wallet staging/
-          cp keypo-signer/.build/release/keypo-signer staging/
+          cp -R keypo-signer/keypo-signer.app staging/
           cp keypo-signer/LICENSE staging/
           tar -czf "$ARCHIVE" -C staging .
           SHA256=$(shasum -a 256 "$ARCHIVE" | awk '{print $1}')

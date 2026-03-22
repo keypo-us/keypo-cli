@@ -2348,7 +2348,7 @@ dependencies = [
 
 [[package]]
 name = "keypo-wallet"
-version = "0.4.0"
+version = "0.4.2"
 dependencies = [
  "alloy",
  "chrono",

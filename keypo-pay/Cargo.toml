@@ -1,0 +1,37 @@
+[package]
+name = "keypo-pay"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "keypo-pay"
+path = "src/bin/main.rs"
+
+[dependencies]
+alloy = { version = "1.7", features = [
+    "provider-http", "sol-types", "rpc-types", "contract", "rlp",
+] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+clap = { version = "4", features = ["derive"] }
+hex = "0.4"
+thiserror = "2"
+dirs = "6"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+url = "2"
+reqwest = { version = "0.12", features = ["json"] }
+toml = "0.8"
+base64 = "0.22"
+p256 = { version = "0.13", features = ["ecdsa"], optional = true }
+
+[features]
+test-utils = ["dep:p256"]
+
+[dev-dependencies]
+tempfile = "3"
+keypo-pay = { path = ".", features = ["test-utils"] }
