@@ -1,3 +1,10 @@
+---
+title: keypo-pay Architecture
+owner: "@davidblumenfeld"
+last_verified: 2026-03-22
+status: current
+---
+
 # keypo-pay Architecture
 
 ## System Overview

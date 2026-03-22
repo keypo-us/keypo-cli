@@ -37,6 +37,7 @@ cd keypo-wallet && cargo test -- --ignored --test-threads=1
 | Doc | Purpose |
 |---|---|
 | [docs/architecture.md](docs/architecture.md) | System diagrams: setup flow, tx sending, paymaster |
+| [docs/keypo-pay-architecture.md](docs/keypo-pay-architecture.md) | keypo-pay Tempo wallet: system diagrams, tx flow, MPP |
 | [docs/conventions.md](docs/conventions.md) | Coding standards, naming, API rules for all 3 languages |
 | [docs/setup.md](docs/setup.md) | Dev environment, toolchain versions, .env setup |
 | [docs/deployment.md](docs/deployment.md) | Contract deployment, secrets inventory, CI/CD |
