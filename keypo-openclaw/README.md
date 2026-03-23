@@ -1,10 +1,12 @@
 # keypo-openclaw
 
-Hardware-secured secrets for [OpenClaw](https://openclaw.ai), backed by the Apple Secure Enclave. Replaces plaintext API keys and tokens in OpenClaw config files with encrypted vault references — resolved at gateway startup via the batched exec provider protocol.
+Hardware-secured secrets for [OpenClaw](https://openclaw.ai), backed by the Apple Secure Enclave.
 
-- One provider block in `openclaw.json` covers all secrets. Compare to 1Password, which requires one provider block per secret.
-- Secrets are encrypted by hardware-bound P-256 keys in the Secure Enclave. They never exist in plaintext on disk.
-- Adding a secret is one command: `keypo-openclaw add`. No manual config editing.
+OpenClaw's exec provider can inject secrets into a subprocess at gateway startup, but it doesn't handle where secrets live at rest — that's up to you. The default is plaintext on disk. You can use password managers like 1Password, but they require managing sessions, auth tokens, and cloud infrastructure. keypo-openclaw gives you a fully self-custody vault: secrets are encrypted by hardware-bound keys in the Secure Enclave, stored locally, and resolved at startup with zero external dependencies.
+
+- Secrets are encrypted by P-256 keys that live inside the Secure Enclave hardware. They never exist in plaintext on disk. No cloud, no sessions, no auth tokens.
+- Adding a secret is one command: `keypo-openclaw add`. It stores the encrypted value and writes the config reference in one step.
+- One provider block in `openclaw.json` covers all secrets — no per-secret boilerplate.
 - Backs up to iCloud Drive with two-factor encryption (iCloud Keychain key + passphrase). Restore on any Mac with the same iCloud account.
 - Works on headless Macs (Mac Mini, Mac Studio) with `--vault open` policy.
 
@@ -169,16 +171,19 @@ keypo-openclaw restore
 
 Backup uses two-factor encryption: an iCloud Keychain synced key + a passphrase (displayed on first backup). Both are required to restore. After restoring, all SecretRefs in the OpenClaw config resolve on the next gateway start — no config changes needed.
 
-## vs. 1Password
+## vs. Plaintext / 1Password / Environment Variables
 
-| | 1Password | keypo-openclaw |
-|---|---|---|
-| Config boilerplate | One 9-line provider block per secret | One provider block total |
-| Adding a secret | Store in 1P + add provider block + add SecretRef + reload | One command + reload |
-| Session management | Desktop app must be unlocked or service account token on disk | None. Secure Enclave is always available. |
-| Cloud dependency | Secrets stored in 1Password cloud | None. Encrypted locally by hardware. |
-| Secret extraction | Service account token on disk can pull all secrets | Not possible. Keys cannot leave the Secure Enclave. |
-| Subscription | Required | Free |
+OpenClaw supports three built-in secret sources (env, file, exec) but none provide encrypted-at-rest storage. Here's how the options compare:
+
+| | Plaintext in config | Environment variables | 1Password (via exec) | keypo-openclaw |
+|---|---|---|---|---|
+| Secrets on disk | Yes. Exposed in backups, git, file access. | Depends on how you set them. Often in `.env` files or shell profiles. | No (stored in 1P cloud). But service account token is on disk. | No. Encrypted by Secure Enclave hardware. |
+| Session / auth management | None | None | Required. Desktop app must be unlocked, or service account token on disk. | None. Secure Enclave is available whenever the device is unlocked. |
+| Cloud dependency | None | None | Yes. Secrets stored in 1Password cloud. | None. Everything is local. |
+| Secret extraction risk | Anyone with file access | Anyone with process/env access | Service account token on disk can pull all secrets | Not possible. Keys cannot leave the Secure Enclave. |
+| Adding a secret | Paste into config | Set in environment + restart | Store in 1P + add SecretRef + reload | One command (`keypo-openclaw add`) + reload |
+| Disaster recovery | Manual backup | Manual backup | 1Password cloud | iCloud Drive backup with two-factor encryption |
+| Cost | Free | Free | Subscription required | Free |
 
 ## Development
 
