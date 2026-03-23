@@ -9,6 +9,7 @@ Hardware-bound key management and encrypted secret storage, powered by Mac Secur
 | CLI | Description |
 |---|---|
 | **`keypo-signer`** | The core product — Secure Enclave P-256 key management, encrypted vault, iCloud backup. Create keys, sign digests, store and inject secrets. |
+| **`keypo-openclaw`** | OpenClaw integration — hardware-secured secrets for OpenClaw via the SecretRef exec provider. One command to add secrets, one provider block for all of them. |
 | **`keypo-wallet`** | Optional extension for on-chain use — adds ERC-4337 smart account delegation, bundler submission, and gas sponsorship. Builds on `keypo-signer`. |
 
 ## Install
@@ -16,6 +17,9 @@ Hardware-bound key management and encrypted secret storage, powered by Mac Secur
 ```bash
 # Core tool — key management + encrypted vault
 brew install keypo-us/tap/keypo-signer
+
+# OpenClaw integration — hardware-secured secrets (includes keypo-signer)
+brew install keypo-us/tap/keypo-openclaw
 
 # Also available: adds smart account + bundler (includes keypo-signer)
 brew install keypo-us/tap/keypo-wallet
@@ -28,6 +32,7 @@ Run `keypo-signer --help` or `keypo-wallet --help` after installing to see avail
 | Directory | Description |
 |---|---|
 | `keypo-signer/` | Swift CLI — Secure Enclave P-256 key management, encrypted vault, iCloud backup (core product) |
+| `keypo-openclaw/` | Rust CLI — hardware-secured secrets for OpenClaw via SecretRef exec provider |
 | `keypo-wallet/` | Rust crate + CLI — ERC-4337 smart account setup, signing, bundler interaction (optional extension) |
 | `keypo-account/` | Foundry project — Solidity smart account contract (ERC-4337 v0.7) |
 | `demo/checkout/` | Checkout demo — AI agent buys from Shopify with Touch ID approval |

@@ -1,7 +1,7 @@
 ---
 title: Deployment and Secrets
 owner: "@davidblumenfeld"
-last_verified: 2026-03-19
+last_verified: 2026-03-23
 status: current
 ---
 
@@ -83,13 +83,17 @@ forge verify-contract <address> src/KeypoAccount.sol:KeypoAccount \
 | `swift.yml` | Push/PR touching `keypo-signer/` | Build + test on macOS |
 | `foundry.yml` | Push/PR touching `keypo-account/` | Build + test with Foundry |
 | `release.yml` | `v*` tag | Version check, tests, build, code-sign, notarize, GitHub release, Homebrew tap update |
+| `release-openclaw.yml` | `openclaw-v*` tag | Build, test, code-sign, notarize, GitHub release, Homebrew tap update (keypo-openclaw only) |
 | `docs.yml` | Push/PR touching `docs/**`, `CLAUDE.md`, `**/README.md` | Documentation freshness checks (links, metadata, staleness) |
 
-### Release Process
+### Release Process: keypo-signer + keypo-wallet
+
+These share a version and release together via the `v*` tag pattern.
 
 1. Bump version in both `keypo-wallet/Cargo.toml` and `keypo-signer/Sources/KeypoCore/Models.swift`.
-2. Tag the commit: `git tag v0.4.0 && git push --tags`.
-3. `release.yml` runs:
+2. Commit: `git commit -m "v0.4.3: description of changes"`.
+3. Tag and push: `git tag v0.4.3 && git push origin main --tags`.
+4. `release.yml` runs automatically:
    - Verifies tag version matches both `Cargo.toml` and `Models.swift`
    - Runs Swift tests (excluding vault integration tests) and Rust tests
    - Builds release binaries for both CLIs (arm64)
@@ -99,20 +103,43 @@ forge verify-contract <address> src/KeypoAccount.sol:KeypoAccount \
    - Creates GitHub Release with the archive attached
    - Triggers `update-formula.yml` in `keypo-us/homebrew-tap` with version and SHA256
 
+### Release Process: keypo-openclaw
+
+keypo-openclaw has an independent version and release cycle via the `openclaw-v*` tag pattern.
+
+1. Bump version in `keypo-openclaw/Cargo.toml`.
+2. Commit: `git commit -m "openclaw v0.1.0: description of changes"`.
+3. Tag and push: `git tag openclaw-v0.1.0 && git push origin main --tags`.
+4. `release-openclaw.yml` runs automatically:
+   - Verifies tag version matches `keypo-openclaw/Cargo.toml`
+   - Runs Rust tests and clippy
+   - Builds release binary (arm64)
+   - Code-signs with Developer ID certificate
+   - Notarizes with Apple
+   - Creates `keypo-openclaw-{version}-macos-arm64.tar.gz` + SHA256
+   - Creates GitHub Release with the archive attached
+   - Triggers `update-openclaw-formula.yml` in `keypo-us/homebrew-tap` with version and SHA256
+
 ## Homebrew Formulas
 
-Two formulas in `homebrew/Formula/`:
+Three formulas in `homebrew/Formula/`:
 
-| Formula | Installs | Conflicts with |
-|---|---|---|
-| `keypo-wallet.rb` | Both `keypo-wallet` and `keypo-signer` binaries | `keypo-signer` |
-| `keypo-signer.rb` | `keypo-signer` binary only | `keypo-wallet` |
+| Formula | Installs | Dependencies | Conflicts with |
+|---|---|---|---|
+| `keypo-wallet.rb` | `keypo-wallet` + `keypo-signer` binaries | — | `keypo-signer` |
+| `keypo-signer.rb` | `keypo-signer` binary only | — | `keypo-wallet` |
+| `keypo-openclaw.rb` | `keypo-openclaw` binary | `keypo-signer` | — |
 
-The recommended install is `keypo-wallet` (includes both). The `keypo-signer` formula exists for users who only need vault and key management without wallet features.
+The recommended install for wallet users is `keypo-wallet` (includes both). The `keypo-signer` formula exists for users who only need vault and key management. `keypo-openclaw` is for OpenClaw users and automatically installs `keypo-signer` as a dependency.
 
-Formula updates are triggered automatically by `release.yml` via the `HOMEBREW_TAP_TOKEN` secret. Users install via:
+Formula updates are triggered automatically by the release workflows via the `HOMEBREW_TAP_TOKEN` secret. The tap repo (`keypo-us/homebrew-tap`) has two update workflows:
+- `update-formula.yml` — updates `keypo-wallet.rb` (triggered by `release.yml`)
+- `update-openclaw-formula.yml` — updates `keypo-openclaw.rb` (triggered by `release-openclaw.yml`)
+
+Users install via:
 
 ```bash
-brew install keypo-us/tap/keypo-wallet    # both binaries
+brew install keypo-us/tap/keypo-wallet    # wallet + signer
 brew install keypo-us/tap/keypo-signer    # signer only
+brew install keypo-us/tap/keypo-openclaw  # openclaw integration (installs signer as dependency)
 ```

@@ -1,0 +1,161 @@
+name: Release OpenClaw
+
+on:
+  push:
+    tags: ['openclaw-v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-openclaw
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify version matches tag
+        run: |
+          TAG_VERSION=${GITHUB_REF_NAME#openclaw-v}
+          CARGO_VERSION=$(grep '^version' keypo-openclaw/Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          echo "Tag:   $TAG_VERSION"
+          echo "Cargo: $CARGO_VERSION"
+          if [ "$CARGO_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::Cargo version ($CARGO_VERSION) does not match tag ($TAG_VERSION)"
+            exit 1
+          fi
+          echo "VERSION=$TAG_VERSION" >> $GITHUB_ENV
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run tests
+        working-directory: keypo-openclaw
+        run: |
+          cargo test
+          cargo clippy --all-targets -- -D warnings
+
+      - name: Build release
+        working-directory: keypo-openclaw
+        run: cargo build --release
+
+      - name: Verify architecture
+        run: |
+          file keypo-openclaw/target/release/keypo-openclaw | grep -q arm64 || {
+            echo "::error::keypo-openclaw binary is not arm64"; exit 1
+          }
+
+      - name: Import signing certificate
+        env:
+          DEVELOPER_ID_CERT_P12: ${{ secrets.DEVELOPER_ID_CERT_P12 }}
+          DEVELOPER_ID_CERT_PASSWORD: ${{ secrets.DEVELOPER_ID_CERT_PASSWORD }}
+          CI_KEYCHAIN_PASSWORD: ${{ secrets.CI_KEYCHAIN_PASSWORD }}
+        run: |
+          echo "$DEVELOPER_ID_CERT_P12" | base64 --decode > certificate.p12
+          security create-keychain -p "$CI_KEYCHAIN_PASSWORD" ci.keychain
+          security default-keychain -s ci.keychain
+          security unlock-keychain -p "$CI_KEYCHAIN_PASSWORD" ci.keychain
+          security set-keychain-settings -t 3600 -u ci.keychain
+          security import certificate.p12 -k ci.keychain \
+            -P "$DEVELOPER_ID_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$CI_KEYCHAIN_PASSWORD" ci.keychain
+          security list-keychains -d user -s ci.keychain login.keychain
+          rm certificate.p12
+
+      - name: Code-sign binary
+        env:
+          DEVELOPER_ID_CERT_NAME: ${{ secrets.DEVELOPER_ID_CERT_NAME }}
+        run: |
+          codesign --force --sign "$DEVELOPER_ID_CERT_NAME" \
+            --options runtime --timestamp \
+            keypo-openclaw/target/release/keypo-openclaw
+          codesign --verify --deep --strict keypo-openclaw/target/release/keypo-openclaw
+
+      - name: Notarize binary
+        env:
+          NOTARIZATION_APPLE_ID: ${{ secrets.NOTARIZATION_APPLE_ID }}
+          NOTARIZATION_TEAM_ID: ${{ secrets.NOTARIZATION_TEAM_ID }}
+          NOTARIZATION_APP_PASSWORD: ${{ secrets.NOTARIZATION_APP_PASSWORD }}
+        run: |
+          mkdir -p notarize-staging
+          cp keypo-openclaw/target/release/keypo-openclaw notarize-staging/
+          ditto -c -k notarize-staging keypo-openclaw.zip
+
+          SUBMIT_OUTPUT=$(xcrun notarytool submit keypo-openclaw.zip \
+            --apple-id "$NOTARIZATION_APPLE_ID" \
+            --team-id "$NOTARIZATION_TEAM_ID" \
+            --password "$NOTARIZATION_APP_PASSWORD" \
+            --wait --timeout 600 2>&1) || {
+            echo "$SUBMIT_OUTPUT"
+            SUBMISSION_ID=$(echo "$SUBMIT_OUTPUT" | grep 'id:' | head -1 | awk '{print $2}')
+            if [ -n "$SUBMISSION_ID" ]; then
+              xcrun notarytool log "$SUBMISSION_ID" \
+                --apple-id "$NOTARIZATION_APPLE_ID" \
+                --team-id "$NOTARIZATION_TEAM_ID" \
+                --password "$NOTARIZATION_APP_PASSWORD"
+            fi
+            exit 1
+          }
+          echo "$SUBMIT_OUTPUT"
+          rm -rf notarize-staging keypo-openclaw.zip
+
+      - name: Create archive
+        run: |
+          ARCHIVE="keypo-openclaw-${VERSION}-macos-arm64.tar.gz"
+          mkdir -p staging
+          cp keypo-openclaw/target/release/keypo-openclaw staging/
+          tar -czf "$ARCHIVE" -C staging .
+          SHA256=$(shasum -a 256 "$ARCHIVE" | awk '{print $1}')
+          echo "ARCHIVE=$ARCHIVE" >> $GITHUB_ENV
+          echo "SHA256=$SHA256" >> $GITHUB_ENV
+          echo "::notice::SHA256: $SHA256"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cat > release_notes.md <<EOF
+          ## What's included
+
+          - **keypo-openclaw** — Hardware-secured secrets for OpenClaw
+
+          ## Install
+
+          \`\`\`bash
+          brew tap keypo-us/tap
+          brew install keypo-openclaw
+          \`\`\`
+
+          Requires keypo-signer: \`brew install keypo-us/tap/keypo-signer\`
+
+          ## SHA256
+          \`$SHA256\`
+          EOF
+
+          if gh release view "openclaw-v$VERSION" &>/dev/null; then
+            gh release upload "openclaw-v$VERSION" "$ARCHIVE" --clobber
+          else
+            gh release create "openclaw-v$VERSION" "$ARCHIVE" \
+              --title "keypo-openclaw v$VERSION" \
+              --notes-file release_notes.md
+          fi
+
+      - name: Update Homebrew tap
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          gh workflow run update-openclaw-formula.yml \
+            --repo keypo-us/homebrew-tap \
+            -f version=$VERSION \
+            -f sha256=$SHA256
+
+      - name: Clean up keychain
+        if: always()
+        run: security delete-keychain ci.keychain || true

@@ -111,15 +111,29 @@ Verified output format for `keypo-signer` commands when using `--format json`. T
     { "vaultKeyId": "com.keypo.vault.passcode", "policy": "passcode" },
     { "vaultKeyId": "com.keypo.vault.biometric", "policy": "biometric" }
   ],
+  "skipped": [],
+  "createdAt": "2026-03-01T12:00:00Z"
+}
+```
+
+On devices without Touch ID or with `--open-only`:
+
+```json
+{
+  "vaults": [
+    { "vaultKeyId": "com.keypo.vault.open", "policy": "open" }
+  ],
+  "skipped": ["passcode", "biometric"],
   "createdAt": "2026-03-01T12:00:00Z"
 }
 ```
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `vaults` | array | One entry per policy |
+| `vaults` | array | One entry per created policy tier |
 | `vaults[].vaultKeyId` | string | `com.keypo.vault.<policy>` |
 | `vaults[].policy` | string | `open`, `passcode`, or `biometric` |
+| `skipped` | array | Policy tiers that could not be created (empty if all succeeded) |
 | `createdAt` | string | ISO 8601 timestamp |
 
 ### `vault set <name> --vault <policy> --format json`

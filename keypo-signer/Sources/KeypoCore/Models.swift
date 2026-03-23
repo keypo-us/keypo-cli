@@ -232,6 +232,14 @@ public struct VaultFile: Codable {
         self.version = version
         self.vaults = vaults
     }
+
+    /// Returns the highest-security tier available in this vault, or nil if empty.
+    public func highestAvailableTier() -> KeyPolicy? {
+        for policy in [KeyPolicy.biometric, .passcode, .open] {
+            if vaults[policy.rawValue] != nil { return policy }
+        }
+        return nil
+    }
 }
 
 public struct VaultEntry: Codable {
@@ -279,6 +287,7 @@ public struct EncryptedSecret: Codable, Equatable {
 
 public struct VaultInitOutput: Codable {
     public let vaults: [VaultInitEntry]
+    public let skipped: [String]
     public let createdAt: Date
 
     public struct VaultInitEntry: Codable {
@@ -291,8 +300,9 @@ public struct VaultInitOutput: Codable {
         }
     }
 
-    public init(vaults: [VaultInitEntry], createdAt: Date) {
+    public init(vaults: [VaultInitEntry], skipped: [String] = [], createdAt: Date) {
         self.vaults = vaults
+        self.skipped = skipped
         self.createdAt = createdAt
     }
 }

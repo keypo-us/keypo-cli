@@ -7,6 +7,7 @@ Hardware-bound key management and encrypted secret storage using Secure Enclave 
 | Directory | Description |
 |---|---|
 | `keypo-signer/` | Swift CLI -- Secure Enclave P-256 key management, encrypted vault, iCloud backup (core product) |
+| `keypo-openclaw/` | Rust CLI -- hardware-secured secrets for OpenClaw via SecretRef exec provider |
 | `keypo-wallet/` | Rust crate + CLI -- ERC-4337 smart account setup, signing, bundler, queries (optional extension) |
 | `keypo-account/` | Foundry -- Solidity smart account (ERC-4337 v0.7, P-256, ERC-7821) |
 | `demo/hermes-checkout/` | Hermes agent demo -- comparison shopping, taste profiles, Telegram |
@@ -21,6 +22,9 @@ Hardware-bound key management and encrypted secret storage using Secure Enclave 
 ```bash
 # Swift (keypo-signer — core product)
 cd keypo-signer && swift build && swift test
+
+# Rust (keypo-openclaw — OpenClaw integration)
+cd keypo-openclaw && cargo check && cargo test && cargo clippy --all-targets -- -D warnings
 
 # Rust (keypo-wallet — optional extension)
 cd keypo-wallet && cargo check && cargo test && cargo clippy --all-targets -- -D warnings
@@ -48,6 +52,7 @@ cd keypo-wallet && cargo test -- --ignored --test-threads=1
 | [docs/documentation-spec.md](docs/documentation-spec.md) | Documentation harness spec for AI agent navigation |
 | [keypo-signer/CLAUDE.md](keypo-signer/CLAUDE.md) | Swift project: architecture, conventions, gotchas |
 | [keypo-signer/JSON-FORMAT.md](keypo-signer/JSON-FORMAT.md) | Verified JSON output schema for all signer commands |
+| [keypo-openclaw/README.md](keypo-openclaw/README.md) | OpenClaw integration: commands, provider config, vault policies |
 
 ## Active Conventions
 
