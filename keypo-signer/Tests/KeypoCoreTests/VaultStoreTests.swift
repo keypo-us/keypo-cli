@@ -247,4 +247,75 @@ final class VaultStoreTests: XCTestCase {
         XCTAssertEqual(decodedSecret?.tag, originalSecret?.tag)
         XCTAssertEqual(decodedSecret?.ephemeralPublicKey, originalSecret?.ephemeralPublicKey)
     }
+
+    // MARK: - highestAvailableTier
+
+    func testHighestAvailableTierFullVault() {
+        let vaultFile = makeThreeVaultFile()
+        XCTAssertEqual(vaultFile.highestAvailableTier(), .biometric)
+    }
+
+    func testHighestAvailableTierOpenOnly() {
+        var vaultFile = VaultFile(version: 2, vaults: [:])
+        vaultFile.vaults["open"] = makeTestVaultEntry(policy: "open")
+        XCTAssertEqual(vaultFile.highestAvailableTier(), .open)
+    }
+
+    func testHighestAvailableTierOpenAndPasscode() {
+        var vaultFile = VaultFile(version: 2, vaults: [:])
+        vaultFile.vaults["open"] = makeTestVaultEntry(policy: "open")
+        vaultFile.vaults["passcode"] = makeTestVaultEntry(policy: "passcode")
+        XCTAssertEqual(vaultFile.highestAvailableTier(), .passcode)
+    }
+
+    func testHighestAvailableTierEmptyVault() {
+        let vaultFile = VaultFile(version: 2, vaults: [:])
+        XCTAssertNil(vaultFile.highestAvailableTier())
+    }
+
+    // MARK: - VaultInitOutput with skipped
+
+    func testVaultInitOutputWithSkipped() throws {
+        let output = VaultInitOutput(
+            vaults: [VaultInitOutput.VaultInitEntry(vaultKeyId: "com.keypo.vault.open", policy: "open")],
+            skipped: ["passcode", "biometric"],
+            createdAt: Date()
+        )
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(output)
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(VaultInitOutput.self, from: data)
+
+        XCTAssertEqual(decoded.vaults.count, 1)
+        XCTAssertEqual(decoded.vaults[0].policy, "open")
+        XCTAssertEqual(decoded.skipped, ["passcode", "biometric"])
+    }
+
+    func testVaultInitOutputWithoutSkipped() throws {
+        let output = VaultInitOutput(
+            vaults: [
+                VaultInitOutput.VaultInitEntry(vaultKeyId: "com.keypo.vault.open", policy: "open"),
+                VaultInitOutput.VaultInitEntry(vaultKeyId: "com.keypo.vault.passcode", policy: "passcode"),
+                VaultInitOutput.VaultInitEntry(vaultKeyId: "com.keypo.vault.biometric", policy: "biometric"),
+            ],
+            createdAt: Date()
+        )
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(output)
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(VaultInitOutput.self, from: data)
+
+        XCTAssertEqual(decoded.vaults.count, 3)
+        XCTAssertEqual(decoded.skipped, [])
+    }
 }

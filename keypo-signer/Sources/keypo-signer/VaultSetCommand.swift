@@ -15,8 +15,8 @@ struct VaultSetCommand: ParsableCommand {
     @Argument(help: "Secret name (environment variable convention)")
     var name: String
 
-    @Option(name: .long, help: "Target vault: biometric, passcode, or open")
-    var vault: KeyPolicy = .biometric
+    @Option(name: .long, help: "Target vault: biometric, passcode, or open (default: highest available)")
+    var vault: KeyPolicy?
 
     @Flag(name: .customLong("stdin"), help: "Read secret value from stdin")
     var fromStdin: Bool = false
@@ -72,9 +72,14 @@ struct VaultSetCommand: ParsableCommand {
             throw ExitCode(1)
         }
 
-        let policyName = vault.rawValue
+        guard let resolvedPolicy = vault ?? vaultFile.highestAvailableTier() else {
+            writeStderr("vault has no tiers available. Run: keypo-signer vault init")
+            throw ExitCode(1)
+        }
+        let policyName = resolvedPolicy.rawValue
         guard var entry = vaultFile.vaults[policyName] else {
-            writeStderr("vault '\(policyName)' not found")
+            let available = vaultFile.vaults.keys.sorted().joined(separator: ", ")
+            writeStderr("vault '\(policyName)' is not available. Available: \(available)")
             throw ExitCode(1)
         }
 

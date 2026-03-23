@@ -15,8 +15,8 @@ struct VaultImportCommand: ParsableCommand {
     @Argument(help: "Path to .env file")
     var file: String
 
-    @Option(name: .long, help: "Target vault: biometric, passcode, or open")
-    var vault: KeyPolicy = .biometric
+    @Option(name: .long, help: "Target vault: biometric, passcode, or open (default: highest available)")
+    var vault: KeyPolicy?
 
     @Flag(name: .customLong("dry-run"), help: "Preview without importing")
     var dryRun: Bool = false
@@ -63,7 +63,7 @@ struct VaultImportCommand: ParsableCommand {
                 }
             }
 
-            let output = VaultImportOutput(vault: vault.rawValue, imported: imported, skipped: skipped)
+            let output = VaultImportOutput(vault: (vault ?? .open).rawValue, imported: imported, skipped: skipped)
             switch globals.format {
             case .json:
                 try outputJSON(output)
@@ -84,9 +84,14 @@ struct VaultImportCommand: ParsableCommand {
             throw ExitCode(1)
         }
 
-        let policyName = vault.rawValue
+        guard let resolvedPolicy = vault ?? vaultFile.highestAvailableTier() else {
+            writeStderr("vault has no tiers available. Run: keypo-signer vault init")
+            throw ExitCode(1)
+        }
+        let policyName = resolvedPolicy.rawValue
         guard var vaultEntry = vaultFile.vaults[policyName] else {
-            writeStderr("vault '\(policyName)' not found")
+            let available = vaultFile.vaults.keys.sorted().joined(separator: ", ")
+            writeStderr("vault '\(policyName)' is not available. Available: \(available)")
             throw ExitCode(1)
         }
 
