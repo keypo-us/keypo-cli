@@ -507,6 +507,7 @@ public enum KeypoError: Error, CustomStringConvertible {
     case ambiguousKey([String])
     case keyMissing(String)
     case creationFailed(String)
+    case storeError(String)
 
     public var description: String {
         switch self {
@@ -521,6 +522,7 @@ public enum KeypoError: Error, CustomStringConvertible {
         case .ambiguousKey(let keys): return "multiple keys exist, specify --key: \(keys.joined(separator: ", "))"
         case .keyMissing(let keyId): return "SE key for '\(keyId)' is missing from Secure Enclave"
         case .creationFailed(let msg): return "key creation failed: \(msg)"
+        case .storeError(let msg): return "store error: \(msg)"
         }
     }
 }

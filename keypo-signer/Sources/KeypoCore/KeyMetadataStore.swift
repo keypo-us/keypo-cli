@@ -1,6 +1,6 @@
 import Foundation
 
-public class KeyMetadataStore {
+public class KeyMetadataStore: KeyMetadataStoring {
     public let configDir: URL
 
     public init(configDir: URL) {
@@ -91,6 +91,9 @@ public class KeyMetadataStore {
     public func addKey(_ key: KeyMetadata) throws {
         try withLock {
             var keys = try loadKeys()
+            guard !keys.contains(where: { $0.keyId == key.keyId }) else {
+                throw KeypoError.storeError("key '\(key.keyId)' already exists")
+            }
             keys.append(key)
             try saveKeys(keys)
         }
@@ -107,9 +110,26 @@ public class KeyMetadataStore {
     public func updateKey(_ key: KeyMetadata) throws {
         try withLock {
             var keys = try loadKeys()
-            if let idx = keys.firstIndex(where: { $0.keyId == key.keyId }) {
-                keys[idx] = key
+            guard let idx = keys.firstIndex(where: { $0.keyId == key.keyId }) else {
+                throw KeypoError.storeError("key '\(key.keyId)' not found")
             }
+            guard keys[idx].dataRepresentation == key.dataRepresentation else {
+                throw KeypoError.storeError(
+                    "cannot update dataRepresentation for '\(key.keyId)' — use replaceKey"
+                )
+            }
+            keys[idx] = key
+            try saveKeys(keys)
+        }
+    }
+
+    public func replaceKey(_ key: KeyMetadata) throws {
+        try withLock {
+            var keys = try loadKeys()
+            guard let idx = keys.firstIndex(where: { $0.keyId == key.keyId }) else {
+                throw KeypoError.storeError("key '\(key.keyId)' not found")
+            }
+            keys[idx] = key
             try saveKeys(keys)
         }
     }
@@ -119,11 +139,12 @@ public class KeyMetadataStore {
     public func incrementSignCount(keyId: String) throws {
         try withLock {
             var keys = try loadKeys()
-            if let idx = keys.firstIndex(where: { $0.keyId == keyId }) {
-                keys[idx].signingCount += 1
-                keys[idx].lastUsedAt = Date()
-                try saveKeys(keys)
+            guard let idx = keys.firstIndex(where: { $0.keyId == keyId }) else {
+                throw KeypoError.storeError("key '\(keyId)' not found")
             }
+            keys[idx].signingCount += 1
+            keys[idx].lastUsedAt = Date()
+            try saveKeys(keys)
         }
     }
 
