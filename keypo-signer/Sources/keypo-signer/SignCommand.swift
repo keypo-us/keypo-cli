@@ -94,7 +94,7 @@ struct SignCommand: ParsableCommand {
         if targetKey.policy == .biometric || targetKey.policy == .passcode {
             let reason = bioReason ?? "Keypo: sign data"
             do {
-                authContext = try SecureEnclaveManager.preAuthenticate(reason: reason)
+                authContext = try SecureEnclaveManager.preAuthenticate(reason: reason, keyPolicy: targetKey.policy)
             } catch VaultError.authenticationCancelled {
                 writeStderr("biometric authentication cancelled")
                 throw ExitCode(4)

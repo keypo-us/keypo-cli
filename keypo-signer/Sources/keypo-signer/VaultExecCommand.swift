@@ -143,7 +143,7 @@ struct VaultExecCommand: ParsableCommand {
                     reason = String(reason.prefix(147)) + "..."
                 }
                 do {
-                    let context = try SecureEnclaveManager.preAuthenticate(reason: reason)
+                    let context = try SecureEnclaveManager.preAuthenticate(reason: reason, keyPolicy: KeyPolicy(rawValue: policyName) ?? .open)
                     authContext = context
                 } catch VaultError.authenticationCancelled {
                     writeStderr("biometric authentication cancelled")

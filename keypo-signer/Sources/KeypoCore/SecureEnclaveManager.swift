@@ -12,35 +12,51 @@ public class SecureEnclaveManager {
     /// Pre-authenticate the user via LAContext before SE key operations.
     /// Returns an authenticated LAContext that can be passed to SE operations
     /// via kSecUseAuthenticationContext, avoiding a second biometric prompt.
+    ///
+    /// - For `.biometric`: returns an unevaluated LAContext with localizedReason set.
+    ///   The SE key's `.biometryCurrentSet` access control triggers Touch ID natively
+    ///   (without a password fallback button) when the key is used.
+    /// - For `.passcode`: evaluates `.deviceOwnerAuthentication` to show a passcode prompt.
+    /// - For `.open`: returns an unevaluated LAContext (no auth needed).
     public static func preAuthenticate(
         reason: String,
-        policy: LAPolicy = .deviceOwnerAuthenticationWithBiometrics
+        keyPolicy: KeyPolicy
     ) throws -> LAContext {
         let context = LAContext()
         context.localizedReason = reason
-        let semaphore = DispatchSemaphore(value: 0)
-        var authError: Error?
-        var success = false
-        context.evaluatePolicy(policy, localizedReason: reason) { result, error in
-            success = result
-            authError = error
-            semaphore.signal()
-        }
-        semaphore.wait()
-        if !success {
-            if let laError = authError as? LAError {
-                switch laError.code {
-                case .userCancel:
-                    throw VaultError.authenticationCancelled
-                case .biometryNotAvailable, .biometryNotEnrolled:
-                    throw VaultError.biometryUnavailable
-                default:
-                    throw VaultError.authenticationFailed
-                }
+
+        switch keyPolicy {
+        case .biometric, .open:
+            // Biometric: don't pre-evaluate — the SE key's .biometryCurrentSet access
+            // control will trigger Touch ID (without password fallback) when the key is used.
+            // Open: no authentication needed.
+            return context
+        case .passcode:
+            // Device passcode prompt
+            let semaphore = DispatchSemaphore(value: 0)
+            var authError: Error?
+            var success = false
+            context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) { result, error in
+                success = result
+                authError = error
+                semaphore.signal()
             }
-            throw VaultError.authenticationFailed
+            semaphore.wait()
+            if !success {
+                if let laError = authError as? LAError {
+                    switch laError.code {
+                    case .userCancel:
+                        throw VaultError.authenticationCancelled
+                    case .biometryNotAvailable, .biometryNotEnrolled:
+                        throw VaultError.biometryUnavailable
+                    default:
+                        throw VaultError.authenticationFailed
+                    }
+                }
+                throw VaultError.authenticationFailed
+            }
+            return context
         }
-        return context
     }
 
     // MARK: - Key Creation

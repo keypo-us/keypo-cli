@@ -9,7 +9,7 @@ public func buildSecretDataMap(from secrets: [String: EncryptedSecret]) throws -
     return map
 }
 
-public class VaultStore {
+public class VaultStore: VaultStoring {
     public let configDir: URL
 
     public init(configDir: URL) {
@@ -89,42 +89,8 @@ public class VaultStore {
         }
     }
 
-    // MARK: - Secret Lookups
-
-    public func findSecret(name: String) throws -> (policy: KeyPolicy, secret: EncryptedSecret)? {
-        let vaultFile = try loadVaultFile()
-        for policyName in ["biometric", "passcode", "open"] {
-            guard let entry = vaultFile.vaults[policyName] else { continue }
-            if let secret = entry.secrets[name] {
-                guard let policy = KeyPolicy(rawValue: policyName) else { continue }
-                return (policy: policy, secret: secret)
-            }
-        }
-        return nil
-    }
-
-    public func allSecretNames() throws -> [(name: String, policy: KeyPolicy)] {
-        let vaultFile = try loadVaultFile()
-        var result: [(name: String, policy: KeyPolicy)] = []
-        for policyName in ["biometric", "passcode", "open"] {
-            guard let entry = vaultFile.vaults[policyName],
-                  let policy = KeyPolicy(rawValue: policyName) else { continue }
-            for name in entry.secrets.keys.sorted() {
-                result.append((name: name, policy: policy))
-            }
-        }
-        return result
-    }
-
-    public func isNameGloballyUnique(_ name: String) throws -> Bool {
-        let vaultFile = try loadVaultFile()
-        for (_, entry) in vaultFile.vaults {
-            if entry.secrets[name] != nil {
-                return false
-            }
-        }
-        return true
-    }
+    // findSecret, allSecretNames, isNameGloballyUnique are provided
+    // by the VaultStoring protocol extension.
 
     // MARK: - Private Helpers
 

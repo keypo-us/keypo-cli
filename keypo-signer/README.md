@@ -31,10 +31,10 @@ keypo-signer vault init
 echo -n "sk_live_abc123" | keypo-signer vault set API_KEY --vault open
 
 # Import secrets from an existing .env file
-keypo-signer vault import --file .env --vault open
+keypo-signer vault import .env --vault open
 
 # Run a command with secrets injected as env vars
-keypo-signer vault exec -- npm start
+keypo-signer vault exec --allow API_KEY -- npm start
 
 # Retrieve a single secret
 keypo-signer vault get API_KEY
@@ -51,21 +51,21 @@ keypo-signer vault get API_KEY
 | `vault delete <name> --confirm` | Delete a secret (irreversible) |
 | `vault list` | List all vaults and their secret names (values are never shown) |
 | `vault exec <command> [args...]` | Run a command with secrets injected as environment variables |
-| `vault import --file <path> --vault <policy>` | Import secrets from a `.env` file |
+| `vault import <path> --vault <policy>` | Import secrets from a `.env` file |
 | `vault destroy --confirm` | Delete all vaults, keys, and secrets (irreversible) |
 | `vault backup` | Encrypt and back up vault secrets to iCloud Drive |
-| `vault backup info` | Show backup status (exists, age, unbackup'd secrets) |
-| `vault backup reset` | Reset backup encryption key and passphrase |
+| `vault backup-info` | Show backup status (exists, age, unbackup'd secrets) |
+| `vault backup-reset` | Reset backup encryption key and passphrase |
 | `vault restore` | Restore vault from iCloud backup (interactive diff/merge if local vault exists) |
 | `vault restore --previous` | Restore from the previous backup instead of current |
 
 ### Using vault exec
 
-`vault exec` is the primary command for running processes with secrets. It decrypts all secrets across all vaults and injects them as environment variables into the subprocess. Use `--env` to filter to only the variables defined in a template file:
+`vault exec` runs a command with secrets injected as environment variables. Use `--allow` to inject specific secrets by name, or `--env` to inject only the variables listed in a template file:
 
 ```bash
-# Inject all vault secrets
-keypo-signer vault exec -- npm start
+# Inject specific secrets
+keypo-signer vault exec --allow API_KEY --allow DB_PASSWORD -- npm start
 
 # Inject only the variables listed in .env.example
 keypo-signer vault exec --env .env.example -- npm start
@@ -135,7 +135,7 @@ See [JSON-FORMAT.md](JSON-FORMAT.md) for the exact JSON schema of each command's
 - **Signatures:** ECDSA with low-S normalization (s <= curve_order/2)
 - **Pre-hashed signing:** the tool signs the input bytes directly. It does NOT hash the input. Callers are responsible for hashing before calling sign.
 - **Backup encryption:** Argon2id + HKDF key derivation, AES-256-GCM encryption, two-factor (iCloud Keychain synced key + passphrase)
-- **Key storage:** private keys live in the Secure Enclave. Metadata is stored in `~/.keypo/keys.json`. Vault data is stored in `~/.keypo/vault.json`.
+- **Key storage:** private keys live in the Secure Enclave. Key metadata and vault data are stored in the macOS Keychain, scoped to the app's code-signing identity.
 
 ## Development
 

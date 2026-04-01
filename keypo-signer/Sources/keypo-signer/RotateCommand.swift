@@ -55,7 +55,7 @@ struct RotateCommand: ParsableCommand {
         updatedKey.lastUsedAt = nil
 
         do {
-            try store.updateKey(updatedKey)
+            try store.replaceKey(updatedKey)
         } catch {
             writeStderr("failed to update metadata: \(error)")
             throw ExitCode(3)

@@ -64,7 +64,7 @@ struct VaultGetCommand: ParsableCommand {
         if found.policy == .biometric || found.policy == .passcode {
             let reason = bioReason ?? "Keypo Vault Access"
             do {
-                authContext = try SecureEnclaveManager.preAuthenticate(reason: reason)
+                authContext = try SecureEnclaveManager.preAuthenticate(reason: reason, keyPolicy: found.policy)
             } catch VaultError.authenticationCancelled {
                 writeStderr("biometric authentication cancelled")
                 throw ExitCode(4)

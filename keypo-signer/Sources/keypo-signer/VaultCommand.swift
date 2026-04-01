@@ -24,8 +24,22 @@ struct VaultCommand: ParsableCommand {
     )
 }
 
-func makeVaultStore(_ globals: GlobalOptions) -> VaultStore {
-    VaultStore(configPath: globals.config)
+func makeVaultStore(_ globals: GlobalOptions) -> any VaultStoring {
+    if let configPath = globals.config {
+        return VaultStore(configPath: configPath)
+    }
+    let keychainStore = KeychainVaultStore()
+    let fileStore = VaultStore()
+    do {
+        let migrated = try VaultMigrator.migrateIfNeeded(from: fileStore, to: keychainStore)
+        if migrated > 0, !globals.quiet {
+            writeStderrRaw("Migrated \(migrated) vault tier(s) from vault.json to Keychain")
+        }
+    } catch {
+        writeStderrWarning("vault migration failed: \(error). Using file store as fallback.")
+        return fileStore
+    }
+    return keychainStore
 }
 
 /// Read a secret value from stdin (piped input)

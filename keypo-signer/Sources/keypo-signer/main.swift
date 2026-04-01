@@ -81,8 +81,22 @@ func outputJSON<T: Encodable>(_ value: T) throws {
     writeStdout("\n")
 }
 
-func makeStore(_ globals: GlobalOptions) -> KeyMetadataStore {
-    KeyMetadataStore(configPath: globals.config)
+func makeStore(_ globals: GlobalOptions) -> any KeyMetadataStoring {
+    if let configPath = globals.config {
+        return KeyMetadataStore(configPath: configPath)
+    }
+    let keychainStore = KeychainMetadataStore()
+    let fileStore = KeyMetadataStore()
+    do {
+        let migrated = try KeyMetadataMigrator.migrateIfNeeded(from: fileStore, to: keychainStore)
+        if migrated > 0, !globals.quiet {
+            writeStderrRaw("Migrated \(migrated) key(s) from keys.json to Keychain")
+        }
+    } catch {
+        writeStderrWarning("key migration failed: \(error). Using file store as fallback.")
+        return fileStore
+    }
+    return keychainStore
 }
 
 func makeISOFormatter() -> ISO8601DateFormatter {

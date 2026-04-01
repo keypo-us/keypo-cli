@@ -48,6 +48,20 @@ struct VaultBackupCommand: ParsableCommand {
             syncedKey = existing
             isFirstBackup = false
 
+            // Show metadata comparison + rotation notice if a backup already exists
+            if let existingBlob = try? iCloudDrive.readBackup() {
+                let localSecrets = (try? store.allSecretNames()) ?? []
+                let localCount = localSecrets.count
+                let localPolicies = Array(Set(localSecrets.map { $0.policy.rawValue })).sorted()
+
+                writeStderrRaw("Current backup: \(existingBlob.secretCount) secret\(existingBlob.secretCount == 1 ? "" : "s") in [\(existingBlob.vaultNames.joined(separator: ", "))] from \(existingBlob.createdAt)")
+                writeStderrRaw("Local vault:    \(localCount) secret\(localCount == 1 ? "" : "s") in [\(localPolicies.joined(separator: ", "))]")
+                writeStderrRaw("")
+                writeStderrRaw("This will replace your current backup. The old backup moves to the \"previous\" slot")
+                writeStderrRaw("and can be recovered with: vault restore --previous")
+                writeStderrRaw("")
+            }
+
             writeStderrRaw("Tip: If you used a generated passphrase, enter all 4 words separated by spaces.")
             guard let input = readSecretFromTerminal(prompt: "Enter your backup passphrase: ") else {
                 writeStderr("failed to read passphrase")
@@ -247,7 +261,8 @@ struct VaultBackupCommand: ParsableCommand {
             if policyName == "biometric" || policyName == "passcode" {
                 do {
                     authContext = try SecureEnclaveManager.preAuthenticate(
-                        reason: "keypo-vault: decrypt \(policyName) secrets for backup"
+                        reason: "keypo-vault: decrypt \(policyName) secrets for backup",
+                        keyPolicy: KeyPolicy(rawValue: policyName) ?? .open
                     )
                 } catch VaultError.authenticationCancelled {
                     writeStderr("authentication cancelled")

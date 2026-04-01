@@ -101,6 +101,11 @@ struct VaultRestoreCommand: ParsableCommand {
 
         writeStderrRaw("Decryption successful.")
 
+        // Mention --previous if a previous backup exists and we're restoring from current
+        if !previous && iCloudDrive.backupExists(previous: true) {
+            writeStderrRaw("Tip: A previous backup is also available via: vault restore --previous")
+        }
+
         // 6. If local vault exists: compute diff, display, prompt
         if hasLocalVault {
             let localVault = try store.loadVaultFile()
@@ -225,7 +230,7 @@ struct VaultRestoreCommand: ParsableCommand {
 
     // MARK: - Replace
 
-    private func performReplace(store: VaultStore, localVault: VaultFile) throws {
+    private func performReplace(store: any VaultStoring, localVault: VaultFile) throws {
         let manager = VaultManager()
         for (_, entry) in localVault.vaults {
             if let dataRep = Data(base64Encoded: entry.dataRepresentation) {
@@ -238,7 +243,7 @@ struct VaultRestoreCommand: ParsableCommand {
 
     // MARK: - Full Restore
 
-    private func performFullRestore(store: VaultStore, payload: BackupPayload) throws {
+    private func performFullRestore(store: any VaultStoring, payload: BackupPayload) throws {
         let manager = VaultManager()
         let now = Date()
         var vaults: [String: VaultEntry] = [:]
@@ -310,7 +315,7 @@ struct VaultRestoreCommand: ParsableCommand {
             for created in createdKeys {
                 manager.deleteKeyAgreementKey(dataRepresentation: created.dataRep)
             }
-            writeStderr("failed to write vault.json: \(error)")
+            writeStderr("failed to save vault: \(error)")
             throw ExitCode(1)
         }
 
@@ -343,7 +348,7 @@ struct VaultRestoreCommand: ParsableCommand {
     // MARK: - Merge
 
     private func performMerge(
-        store: VaultStore, localVault: VaultFile, diff: RestoreDiff,
+        store: any VaultStoring, localVault: VaultFile, diff: RestoreDiff,
         payload: BackupPayload
     ) throws {
         let manager = VaultManager()

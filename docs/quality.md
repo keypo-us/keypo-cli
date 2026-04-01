@@ -16,8 +16,8 @@ status: current
 | keypo-wallet (scaffolding) | 3 | `cargo test --test '*'` |
 | keypo-wallet (integration) | 10 (ignored in CI) | `cargo test -- --ignored --test-threads=1` |
 | keypo-account (Foundry) | 30 | `forge test` |
-| keypo-signer (Swift) | 141 | `swift test` |
-| **Total (non-ignored)** | **189 Rust + 30 Foundry + 141 Swift = 360** | |
+| keypo-signer (Swift) | 222 | `swift test` |
+| **Total (non-ignored)** | **189 Rust + 30 Foundry + 222 Swift = 441** | |
 
 ## Integration Test Requirements
 
@@ -63,8 +63,14 @@ status: current
 | Test Suite | Tests | Description |
 |---|---|---|
 | SignatureFormatterTests | 21 | DER parsing, low-S normalization, r/s extraction |
+| KeychainMetadataStoreTests | 18 | Keychain-backed key metadata CRUD, isolation, conformance |
+| KeyMetadataStoreTests | 5 | File-based key metadata store protocol conformance |
+| KeyMetadataMigratorTests | 11 | Key metadata migration: file→Keychain, idempotency, rollback |
 | VaultManagerTests | 22 | ECIES encrypt/decrypt, HMAC integrity, key lifecycle |
-| VaultStoreTests | 14 | Vault file I/O, secret lookup, file locking, atomic writes |
+| VaultStoreTests | 20 | Vault file I/O, secret lookup, file locking, atomic writes |
+| KeychainVaultStoreTests | 24 | Keychain-backed vault store CRUD, stale tier cleanup, size limits |
+| VaultStoreProtocolTests | 5 | VaultStoring protocol conformance for both stores |
+| VaultMigratorTests | 12 | Vault migration: file→Keychain, idempotency, rollback |
 | VaultIntegrationTests | 22 | End-to-end vault workflows (init → set → get → update → delete → destroy) |
 | EnvFileParserTests | 15 | .env parsing: quotes, comments, export prefix, BOM, dedup |
 | ExecArgsHelperTests | 6 | vault exec argument parsing and dash-dash stripping |
@@ -75,11 +81,11 @@ status: current
 | iCloudDriveTests | 8 | iCloud Drive read/write, backup rotation, previous backup |
 | PassphraseGeneratorTests | 4 | Word count, wordlist membership, randomness, confirmation indices |
 | WordlistTests | 3 | Wordlist count, format validation, no duplicates |
-| **Total** | **141** | |
+| **Total** | **222** | |
 
 ## Known Gaps
 
 - No code coverage measurement configured (consider `cargo-tarpaulin` or `cargo-llvm-cov`)
-- ~~Swift test count not tracked automatically~~ (now tracked: 141 tests)
+- ~~Swift test count not tracked automatically~~ (now tracked: 222 tests)
 - No fuzz testing for ABI encoding/decoding
 - WebAuthn frontend tests are manual only (`tests/webauthn-frontend/`)

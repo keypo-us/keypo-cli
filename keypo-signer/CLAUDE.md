@@ -50,11 +50,17 @@ keypo-signer/
 │   │       └── RestoreCommand.swift        # vault restore (diff, merge, replace)
 │   └── KeypoCore/             # Library target — all SE and key management logic
 │       ├── SecureEnclaveManager.swift   # SE signing key operations (create, sign, delete)
-│       ├── KeyMetadataStore.swift       # ~/.keypo/keys.json read/write
+│       ├── KeyMetadataStoring.swift      # Protocol for key metadata persistence
+│       ├── KeyMetadataStore.swift       # File-based store (~/.keypo/keys.json, legacy/--config)
+│       ├── KeychainMetadataStore.swift  # Keychain-backed store (default, app-scoped)
+│       ├── KeyMetadataMigrator.swift    # One-time migration from file store to Keychain
 │       ├── SignatureFormatter.swift     # DER parsing, r/s extraction, low-S normalization
 │       ├── Models.swift                 # Codable structs for metadata and JSON output
+│       ├── VaultStoring.swift            # Protocol for vault persistence + shared lookup extension
 │       ├── VaultManager.swift           # ECIES encryption/decryption, HMAC integrity, SE key lifecycle
-│       ├── VaultStore.swift             # ~/.keypo/vault.json read/write, secret lookup
+│       ├── VaultStore.swift             # File-based vault store (~/.keypo/vault.json, legacy/--config)
+│       ├── KeychainVaultStore.swift     # Keychain-backed vault store (default, one item per policy tier)
+│       ├── VaultMigrator.swift          # One-time migration from vault.json to Keychain
 │       ├── EnvFileParser.swift          # .env file parsing for vault import/exec
 │       └── Backup/
 │           ├── BackupBlob.swift            # BackupPayload, BackupVault, BackupSecret models
@@ -70,6 +76,12 @@ keypo-signer/
 └── Tests/
     └── KeypoCoreTests/
         ├── SignatureFormatterTests.swift
+        ├── KeychainMetadataStoreTests.swift
+        ├── KeyMetadataStoreTests.swift
+        ├── KeyMetadataMigratorTests.swift
+        ├── KeychainVaultStoreTests.swift
+        ├── VaultStoreProtocolTests.swift
+        ├── VaultMigratorTests.swift
         ├── VaultManagerTests.swift
         ├── VaultStoreTests.swift
         ├── VaultIntegrationTests.swift
@@ -112,21 +124,23 @@ swift test
 
 5. **Three access control policies: open, passcode, biometric.** These map to SecAccessControl flags. The policy is set at key creation and is immutable. Only signing is gated by the policy (hardware-enforced). Delete and rotate are not gated by the key's policy.
 
-6. **Metadata is a JSON file, not a database.** `~/.keypo/keys.json` stores key labels, public keys, policies, counters. No secret material. Config dir is 700, file is 600.
+6. **Signing key metadata is stored in the macOS Keychain** using `kSecClassGenericPassword` items scoped to the app's access group (`FWJKHZ4TZD.com.keypo.signer`). The `dataRepresentation` (opaque SE token) is stored as `kSecValueData`; all other metadata (publicKey, policy, counters, etc.) is stored as a JSON-encoded `Data` blob in `kSecAttrGeneric`. The `--config` flag falls back to the legacy file-based store (`~/.keypo/keys.json`). On first run, keys.json is auto-migrated to Keychain and renamed to `keys.json.migrated`.
 
-7. **Application tags follow the pattern `com.keypo.signer.<label>`.** This is how we look up SE keys in the Keychain.
+7. **`updateKey` vs `replaceKey`.** `updateKey` updates metadata but MUST NOT change `dataRepresentation` (the SE token). It throws `storeError` if the caller passes a different token. For key rotation (which produces a new SE key), use `replaceKey` — this atomically replaces the entire entry including the SE token. The error type for both stores is `KeypoError.storeError(String)`.
 
-8. **Vault: VaultManager handles crypto, VaultStore handles persistence, commands are thin wrappers.** `VaultManager` owns ECIES encryption/decryption (ECDH + HKDF-SHA256 + AES-256-GCM), HMAC integrity computation, and SE key agreement key lifecycle. `VaultStore` owns `~/.keypo/vault.json` read/write, file locking, and secret lookup across vaults. Vault command files in `keypo-signer/` are thin wrappers that parse arguments, call VaultManager/VaultStore, and format output.
+8. **Application tags follow the pattern `com.keypo.signer.<label>`.** This is how we look up SE keys in the Keychain.
 
-9. **Vault LAContext sharing.** One `LAContext` per command invocation, passed to all `VaultManager` calls within that command. This avoids multiple Touch ID / passcode prompts for a single user action.
+9. **Vault: VaultManager handles crypto, VaultStoring handles persistence, commands are thin wrappers.** `VaultManager` owns ECIES encryption/decryption (ECDH + HKDF-SHA256 + AES-256-GCM), HMAC integrity computation, and SE key agreement key lifecycle. The `VaultStoring` protocol abstracts persistence — `KeychainVaultStore` (default) stores one `kSecClassGenericPassword` item per policy tier in the Keychain scoped to `FWJKHZ4TZD.com.keypo.signer`; `VaultStore` (legacy/`--config`) uses `~/.keypo/vault.json`. On first run, vault.json is auto-migrated to Keychain and renamed to `vault.json.migrated`. The `findSecret`, `allSecretNames`, and `isNameGloballyUnique` methods are protocol extension methods shared by both stores.
 
-10. **Vault HMAC integrity verification before mutation.** Any command that mutates vault state (set, update, delete, import, destroy) MUST verify the HMAC integrity envelope before making changes. This prevents silent corruption propagation.
+10. **Vault LAContext sharing.** One `LAContext` per command invocation, passed to all `VaultManager` calls within that command. This avoids multiple Touch ID / passcode prompts for a single user action.
 
-11. **Vault atomic writes.** All vault file writes go through `VaultStore`, which writes to a temp file then renames (same pattern as `KeyMetadataStore`).
+11. **Vault HMAC integrity verification before mutation.** Any command that mutates vault state (set, update, delete, import, destroy) MUST verify the HMAC integrity envelope before making changes. This prevents silent corruption propagation.
 
-12. **Restore two-phase merge.** `vault restore` with merge verifies HMACs in Phase A (may trigger auth prompts for passcode/biometric vaults), then mutates in Phase B using cached LAContexts. This is an exception to rule 9's "one LAContext per command" — merge creates one LAContext per policy because different policies require independent authentication.
+12. **Vault atomic writes.** File store: writes to a temp file then renames (same pattern as `KeyMetadataStore`). Keychain store: per-item SecItemUpdate/SecItemAdd is atomic; multi-tier saves are not transactional (acceptable for single-user CLI). `SecItemDelete` with broad queries may only delete one item per call on macOS — vault uses per-tier deletion. Vault Keychain items have a 50 KB size limit per tier.
 
-13. **TTY detection for interactive vs JSON output.** `vault restore` uses `isatty(STDIN_FILENO)` to determine whether to show the interactive diff/prompt or emit JSON conflict output. This ensures terminal users always get the interactive flow even when `--format json` is the default.
+13. **Restore two-phase merge.** `vault restore` with merge verifies HMACs in Phase A (may trigger auth prompts for passcode/biometric vaults), then mutates in Phase B using cached LAContexts. This is an exception to rule 10's "one LAContext per command" — merge creates one LAContext per policy because different policies require independent authentication.
+
+14. **TTY detection for interactive vs JSON output.** `vault restore` uses `isatty(STDIN_FILENO)` to determine whether to show the interactive diff/prompt or emit JSON conflict output. This ensures terminal users always get the interactive flow even when `--format json` is the default.
 
 ## Coding Conventions
 
@@ -147,7 +161,8 @@ swift test
 - **SecItemDelete does not respect the key's access control policy.** Any process that knows the application tag can delete a key. This is by design — we don't gate delete behind the key's policy.
 - **ECDSA signatures are non-deterministic.** Signing the same data twice produces different signatures. Both are valid. Tests must account for this.
 - **`.biometryCurrentSet` invalidates the key if biometrics change.** If a user re-enrolls their fingerprint, biometric-policy keys become permanently inaccessible. This is intentional Apple behavior.
-- **Concurrent metadata writes.** Multiple signing processes can run in parallel. The metadata file (signing counters) needs atomic write handling — write to a temp file, then rename.
+- **Concurrent metadata writes.** Multiple signing processes can run in parallel. Keychain store: individual operations are atomic per-item; `incrementSignCount` has a read-modify-write race (acceptable — counter is informational). File store: uses flock for serialization.
+- **`kSecReturnData` + `kSecMatchLimitAll` returns errSecParam (-50)** on some macOS versions. `loadKeys` works around this by querying attributes only, then fetching each key individually via `findKey`.
 - **SE key lookup.** Use `SecItemCopyMatching` with `kSecAttrApplicationTag` set to `com.keypo.signer.<label>` to find keys. Set `kSecAttrTokenID` to `kSecAttrTokenIDSecureEnclave` to ensure we only match SE keys.
 - **Vault uses KeyAgreement keys, not Signing keys.** Vault encryption uses `SecureEnclave.P256.KeyAgreement.PrivateKey` (for ECDH), NOT `SecureEnclave.P256.Signing.PrivateKey`. These are different key types with different Keychain application tags (`com.keypo.vault.<policy>` vs `com.keypo.signer.<label>`).
 - **ECDH authentication cancellation detection.** LAContext cancellation during ECDH throws errors that need both code `-2` check AND string-based fallback detection (the error domain varies across macOS versions).
