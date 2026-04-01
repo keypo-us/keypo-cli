@@ -56,8 +56,11 @@ keypo-signer/
 │       ├── KeyMetadataMigrator.swift    # One-time migration from file store to Keychain
 │       ├── SignatureFormatter.swift     # DER parsing, r/s extraction, low-S normalization
 │       ├── Models.swift                 # Codable structs for metadata and JSON output
+│       ├── VaultStoring.swift            # Protocol for vault persistence + shared lookup extension
 │       ├── VaultManager.swift           # ECIES encryption/decryption, HMAC integrity, SE key lifecycle
-│       ├── VaultStore.swift             # ~/.keypo/vault.json read/write, secret lookup
+│       ├── VaultStore.swift             # File-based vault store (~/.keypo/vault.json, legacy/--config)
+│       ├── KeychainVaultStore.swift     # Keychain-backed vault store (default, one item per policy tier)
+│       ├── VaultMigrator.swift          # One-time migration from vault.json to Keychain
 │       ├── EnvFileParser.swift          # .env file parsing for vault import/exec
 │       └── Backup/
 │           ├── BackupBlob.swift            # BackupPayload, BackupVault, BackupSecret models
@@ -76,6 +79,9 @@ keypo-signer/
         ├── KeychainMetadataStoreTests.swift
         ├── KeyMetadataStoreTests.swift
         ├── KeyMetadataMigratorTests.swift
+        ├── KeychainVaultStoreTests.swift
+        ├── VaultStoreProtocolTests.swift
+        ├── VaultMigratorTests.swift
         ├── VaultManagerTests.swift
         ├── VaultStoreTests.swift
         ├── VaultIntegrationTests.swift
@@ -124,13 +130,13 @@ swift test
 
 8. **Application tags follow the pattern `com.keypo.signer.<label>`.** This is how we look up SE keys in the Keychain.
 
-9. **Vault: VaultManager handles crypto, VaultStore handles persistence, commands are thin wrappers.** `VaultManager` owns ECIES encryption/decryption (ECDH + HKDF-SHA256 + AES-256-GCM), HMAC integrity computation, and SE key agreement key lifecycle. `VaultStore` owns `~/.keypo/vault.json` read/write, file locking, and secret lookup across vaults. Vault command files in `keypo-signer/` are thin wrappers that parse arguments, call VaultManager/VaultStore, and format output.
+9. **Vault: VaultManager handles crypto, VaultStoring handles persistence, commands are thin wrappers.** `VaultManager` owns ECIES encryption/decryption (ECDH + HKDF-SHA256 + AES-256-GCM), HMAC integrity computation, and SE key agreement key lifecycle. The `VaultStoring` protocol abstracts persistence — `KeychainVaultStore` (default) stores one `kSecClassGenericPassword` item per policy tier in the Keychain scoped to `FWJKHZ4TZD.com.keypo.signer`; `VaultStore` (legacy/`--config`) uses `~/.keypo/vault.json`. On first run, vault.json is auto-migrated to Keychain and renamed to `vault.json.migrated`. The `findSecret`, `allSecretNames`, and `isNameGloballyUnique` methods are protocol extension methods shared by both stores.
 
 10. **Vault LAContext sharing.** One `LAContext` per command invocation, passed to all `VaultManager` calls within that command. This avoids multiple Touch ID / passcode prompts for a single user action.
 
 11. **Vault HMAC integrity verification before mutation.** Any command that mutates vault state (set, update, delete, import, destroy) MUST verify the HMAC integrity envelope before making changes. This prevents silent corruption propagation.
 
-12. **Vault atomic writes.** All vault file writes go through `VaultStore`, which writes to a temp file then renames (same pattern as `KeyMetadataStore`).
+12. **Vault atomic writes.** File store: writes to a temp file then renames (same pattern as `KeyMetadataStore`). Keychain store: per-item SecItemUpdate/SecItemAdd is atomic; multi-tier saves are not transactional (acceptable for single-user CLI). `SecItemDelete` with broad queries may only delete one item per call on macOS — vault uses per-tier deletion. Vault Keychain items have a 50 KB size limit per tier.
 
 13. **Restore two-phase merge.** `vault restore` with merge verifies HMACs in Phase A (may trigger auth prompts for passcode/biometric vaults), then mutates in Phase B using cached LAContexts. This is an exception to rule 10's "one LAContext per command" — merge creates one LAContext per policy because different policies require independent authentication.
 

@@ -405,8 +405,8 @@ keypo-signer vault list --format json
 ### 7.4 Exec
 
 ```bash
-keypo-signer vault exec -- env | grep MY_SECRET
-keypo-signer vault exec -- sh -c 'echo $MY_SECRET'
+keypo-signer vault exec --allow MY_SECRET -- printenv MY_SECRET
+keypo-signer vault exec --allow MY_SECRET -- sh -c 'echo $MY_SECRET'
 ```
 
 - [ ] Secret is available as environment variable in subprocess
@@ -418,8 +418,8 @@ Create a test `.env` file:
 ```bash
 echo 'IMPORT_KEY_1=value1
 IMPORT_KEY_2=value2' > /tmp/test-vault-import.env
-keypo-signer vault import --file /tmp/test-vault-import.env --vault open
-keypo-signer vault import --file /tmp/test-vault-import.env --vault open --format json
+keypo-signer vault import /tmp/test-vault-import.env --vault open
+keypo-signer vault import /tmp/test-vault-import.env --vault open --format json
 ```
 
 - [ ] First import succeeds, imports both keys
@@ -543,8 +543,8 @@ keypo-signer vault restore
 #### 7.9.9 Backup info
 
 ```bash
-keypo-signer vault backup info
-keypo-signer vault backup info --format json
+keypo-signer vault backup-info
+keypo-signer vault backup-info --format json
 ```
 
 - [ ] Shows backup exists, creation date, device name, secret count
