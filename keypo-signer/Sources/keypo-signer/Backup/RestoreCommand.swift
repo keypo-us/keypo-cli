@@ -101,6 +101,11 @@ struct VaultRestoreCommand: ParsableCommand {
 
         writeStderrRaw("Decryption successful.")
 
+        // Mention --previous if a previous backup exists and we're restoring from current
+        if !previous && iCloudDrive.backupExists(previous: true) {
+            writeStderrRaw("Tip: A previous backup is also available via: vault restore --previous")
+        }
+
         // 6. If local vault exists: compute diff, display, prompt
         if hasLocalVault {
             let localVault = try store.loadVaultFile()

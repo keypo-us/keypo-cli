@@ -195,7 +195,8 @@ struct VaultBackupResetCommand: ParsableCommand {
             if policyName == "biometric" || policyName == "passcode" {
                 do {
                     authContext = try SecureEnclaveManager.preAuthenticate(
-                        reason: "keypo-vault: decrypt \(policyName) secrets for backup reset"
+                        reason: "keypo-vault: decrypt \(policyName) secrets for backup reset",
+                        keyPolicy: KeyPolicy(rawValue: policyName) ?? .open
                     )
                 } catch VaultError.authenticationCancelled {
                     writeStderr("authentication cancelled")
