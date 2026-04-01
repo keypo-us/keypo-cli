@@ -127,7 +127,7 @@ DECRYPT (vault get)
 
 **HMAC integrity envelope**: Before any vault mutation, the HMAC is verified. Key derivation: ECDH with SE key → HKDF-SHA256 (info: `"keypo-vault-integrity-v1"`) → HMAC-SHA256 over canonical JSON (`.sortedKeys` formatting). This detects tampering or corruption before any write.
 
-**Vault file**: `~/.keypo/vault.json`, permissions 600. Per-policy vaults with encrypted secrets. POSIX `flock` for concurrent access safety.
+**Vault storage**: Default is Keychain — one `kSecClassGenericPassword` item per policy tier, scoped to access group `FWJKHZ4TZD.com.keypo.signer`. Per-item atomicity (not transactional across tiers). 50 KB size limit per tier. Legacy file store (`~/.keypo/vault.json`, POSIX `flock`, permissions 600) available via `--config` flag. Auto-migrated on first run.
 
 ### Vault Key Types
 

@@ -74,7 +74,8 @@ Standards and gotchas for all three languages in the monorepo. These are enforce
 - **Application tag pattern**: `com.keypo.signer.<label>` -- this is how SE keys are looked up in the Keychain.
 - **Label validation**: `^[a-z][a-z0-9-]{0,63}$`.
 - **Output routing**: Structured output to stdout, errors to stderr.
-- **Atomic file writes**: Write to temp file, then rename (for `~/.keypo/keys.json` metadata).
+- **Key metadata storage**: Default is Keychain (`kSecClassGenericPassword` scoped to `FWJKHZ4TZD.com.keypo.signer`). Legacy file store (`~/.keypo/keys.json`) used via `--config` flag. Auto-migrated on first run (old file renamed to `keys.json.migrated`).
+- **Atomic file writes**: Write to temp file, then rename (legacy file stores only).
 
 ### Vault Conventions
 
@@ -82,9 +83,10 @@ Standards and gotchas for all three languages in the monorepo. These are enforce
 - **ECIES encryption**: ECDH with ephemeral P-256 key + HKDF-SHA256 (salt: ephemeral public key raw bytes) + AES-256-GCM. HKDF info string: `"keypo-vault-v1" || secret_name`.
 - **HMAC integrity**: Key is `"keypo-vault-integrity-v1"`, computed over canonical JSON serialization of secrets dictionary using `.sortedKeys` output formatting. Verified before any mutation.
 - **LAContext sharing**: One LAContext per command invocation, passed to all VaultManager calls. Avoids multiple auth prompts per action.
+- **preAuthenticate policy**: `preAuthenticate(reason:keyPolicy:)` takes `KeyPolicy`, not `LAPolicy`. For biometric keys, returns an unevaluated `LAContext` — the SE key's `.biometryCurrentSet` access control triggers Touch ID natively without a password fallback button. For passcode keys, evaluates `.deviceOwnerAuthentication`.
 - **Secret name validation**: `^[A-Za-z_][A-Za-z0-9_]{0,127}$`. Different from signing key label validation (`^[a-z][a-z0-9-]{0,63}$`).
 - **Vault key type**: `SecureEnclave.P256.KeyAgreement.PrivateKey` (not Signing). Used for ECDH key agreement.
-- **Vault file**: `~/.keypo/vault.json`, permissions 600. Uses POSIX `flock` for concurrent access safety.
+- **Vault storage**: Default is Keychain (one `kSecClassGenericPassword` item per policy tier, scoped to `FWJKHZ4TZD.com.keypo.signer`). Legacy file store (`~/.keypo/vault.json`) used via `--config` flag. Auto-migrated on first run (old file renamed to `vault.json.migrated`). Keychain items have a 50 KB size limit per tier.
 
 ### Backup/Restore Conventions
 
