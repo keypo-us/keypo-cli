@@ -5,7 +5,11 @@ import KeypoCore
 struct VaultBackupInfoCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "backup-info",
-        abstract: "Show backup status without decrypting"
+        abstract: "Show backup status without decrypting",
+        discussion: """
+        Examples:
+          keypo-signer vault backup-info
+        """
     )
 
     @OptionGroup var globals: GlobalOptions

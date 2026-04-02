@@ -5,7 +5,12 @@ import KeypoCore
 struct SessionRefreshCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "refresh",
-        abstract: "Refresh a session's TTL or usage limits"
+        abstract: "Refresh a session's TTL or usage limits",
+        discussion: """
+        Examples:
+          keypo-signer vault session refresh orbital-canvas --ttl 2h
+          keypo-signer vault session refresh orbital-canvas --max-uses 100
+        """
     )
 
     @OptionGroup var globals: GlobalOptions

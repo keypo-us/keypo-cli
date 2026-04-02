@@ -7,7 +7,12 @@ import LocalAuthentication
 struct SessionStartCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "start",
-        abstract: "Create a scoped, time-limited session"
+        abstract: "Create a scoped, time-limited session",
+        discussion: """
+        Examples:
+          keypo-signer vault session start --secrets API_KEY,DB_PASS --ttl 1h
+          keypo-signer vault session start --secrets API_KEY --ttl 30m --max-uses 50
+        """
     )
 
     @OptionGroup var globals: GlobalOptions

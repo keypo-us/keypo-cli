@@ -6,6 +6,13 @@ struct VaultCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "vault",
         abstract: "Manage encrypted secrets with Secure Enclave protection",
+        discussion: """
+        Examples:
+          keypo-signer vault init
+          keypo-signer vault set API_KEY --vault open
+          keypo-signer vault exec --allow API_KEY -- npm start
+          keypo-signer vault exec --session my-session -- npm start
+        """,
         subcommands: [
             VaultInitCommand.self,
             VaultSetCommand.self,

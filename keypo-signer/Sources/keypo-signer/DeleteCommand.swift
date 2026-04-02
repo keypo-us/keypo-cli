@@ -5,7 +5,11 @@ import KeypoCore
 struct DeleteCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "delete",
-        abstract: "Permanently destroy a Secure Enclave key"
+        abstract: "Permanently destroy a Secure Enclave key",
+        discussion: """
+        Examples:
+          keypo-signer delete my-key --confirm
+        """
     )
 
     @OptionGroup var globals: GlobalOptions

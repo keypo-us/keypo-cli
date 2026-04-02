@@ -5,7 +5,12 @@ import KeypoCore
 struct InfoCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "info",
-        abstract: "Get detailed information about a specific key or the system"
+        abstract: "Get detailed information about a specific key or the system",
+        discussion: """
+        Examples:
+          keypo-signer info my-key
+          keypo-signer info --system
+        """
     )
 
     @OptionGroup var globals: GlobalOptions

@@ -7,7 +7,12 @@ import LocalAuthentication
 struct VaultUpdateCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "update",
-        abstract: "Update an existing secret's value"
+        abstract: "Update an existing secret's value",
+        discussion: """
+        Examples:
+          echo -n "new_value" | keypo-signer vault update API_KEY --stdin
+          keypo-signer vault update API_KEY
+        """
     )
 
     @OptionGroup var globals: GlobalOptions

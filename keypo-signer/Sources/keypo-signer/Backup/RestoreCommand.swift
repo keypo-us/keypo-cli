@@ -7,7 +7,12 @@ import LocalAuthentication
 struct VaultRestoreCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "restore",
-        abstract: "Restore vault secrets from an iCloud Drive backup"
+        abstract: "Restore vault secrets from an iCloud Drive backup",
+        discussion: """
+        Examples:
+          keypo-signer vault restore
+          keypo-signer vault restore --previous
+        """
     )
 
     @OptionGroup var globals: GlobalOptions

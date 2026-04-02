@@ -7,7 +7,12 @@ import LocalAuthentication
 struct VaultSetCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "set",
-        abstract: "Store an encrypted secret in a vault"
+        abstract: "Store an encrypted secret in a vault",
+        discussion: """
+        Examples:
+          echo -n "sk_live_abc123" | keypo-signer vault set API_KEY --vault open
+          keypo-signer vault set DB_PASSWORD --vault biometric
+        """
     )
 
     @OptionGroup var globals: GlobalOptions

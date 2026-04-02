@@ -5,7 +5,12 @@ import KeypoCore
 struct CreateCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "create",
-        abstract: "Generate a new P-256 signing key in the Secure Enclave"
+        abstract: "Generate a new P-256 signing key in the Secure Enclave",
+        discussion: """
+        Examples:
+          keypo-signer create --label my-key --policy open
+          keypo-signer create --label wallet-key --policy biometric
+        """
     )
 
     @OptionGroup var globals: GlobalOptions

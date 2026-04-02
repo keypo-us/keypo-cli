@@ -5,7 +5,11 @@ import KeypoCore
 struct SessionStatusCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "status",
-        abstract: "Show detailed status of a session"
+        abstract: "Show detailed status of a session",
+        discussion: """
+        Examples:
+          keypo-signer vault session status orbital-canvas
+        """
     )
 
     @OptionGroup var globals: GlobalOptions

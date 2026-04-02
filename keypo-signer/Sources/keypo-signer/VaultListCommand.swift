@@ -5,7 +5,12 @@ import KeypoCore
 struct VaultListCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "list",
-        abstract: "List all vaults and their secrets (no decryption)"
+        abstract: "List all vaults and their secrets (no decryption)",
+        discussion: """
+        Examples:
+          keypo-signer vault list
+          keypo-signer vault list --format pretty
+        """
     )
 
     @OptionGroup var globals: GlobalOptions

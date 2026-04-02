@@ -5,7 +5,12 @@ import KeypoCore
 struct ListCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "list",
-        abstract: "List all managed keys and their status"
+        abstract: "List all managed keys and their status",
+        discussion: """
+        Examples:
+          keypo-signer list
+          keypo-signer list --format pretty
+        """
     )
 
     @OptionGroup var globals: GlobalOptions

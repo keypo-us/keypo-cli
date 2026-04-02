@@ -7,7 +7,12 @@ import LocalAuthentication
 struct VaultImportCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "import",
-        abstract: "Bulk-import secrets from a .env file"
+        abstract: "Bulk-import secrets from a .env file",
+        discussion: """
+        Examples:
+          keypo-signer vault import .env --vault open
+          keypo-signer vault import .env.production --vault biometric --dry-run
+        """
     )
 
     @OptionGroup var globals: GlobalOptions

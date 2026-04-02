@@ -6,7 +6,11 @@ import LocalAuthentication
 struct VaultDestroyCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "destroy",
-        abstract: "Destroy all vaults, deleting all encrypted secrets and vault keys"
+        abstract: "Destroy all vaults, deleting all encrypted secrets and vault keys",
+        discussion: """
+        Examples:
+          keypo-signer vault destroy --confirm
+        """
     )
 
     @OptionGroup var globals: GlobalOptions
