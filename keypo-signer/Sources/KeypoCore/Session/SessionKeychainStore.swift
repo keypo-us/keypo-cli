@@ -117,8 +117,48 @@ public class SessionKeychainStore {
         }
     }
 
-    /// List all sessions (attributes-only query, then fetch individually).
+    /// List all sessions in a single Keychain query (avoids per-item permission prompts).
     public func listSessions() throws -> [(metadata: SessionMetadata, tempKeyDataRep: Data)] {
+        var query = baseQuery()
+        query[kSecReturnData as String] = true
+        query[kSecReturnAttributes as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitAll
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+
+        guard status == errSecSuccess else {
+            if status == errSecItemNotFound { return [] }
+            // kSecReturnData + kSecMatchLimitAll returns errSecParam (-50) on some macOS versions.
+            // Fall back to attributes-only query, then fetch individually.
+            if status == errSecParam {
+                return try listSessionsFallback()
+            }
+            throw SessionError.keychainError("list sessions failed: OSStatus \(status)")
+        }
+        guard let result = result else { return [] }
+
+        var items: [[String: Any]]
+        if let array = result as? [[String: Any]] {
+            items = array
+        } else if let single = result as? [String: Any] {
+            items = [single]
+        } else {
+            return []
+        }
+
+        return items.compactMap { item in
+            guard let valueData = item[kSecValueData as String] as? Data,
+                  let genericData = item[kSecAttrGeneric as String] as? Data,
+                  let metadata = try? Self.decoder.decode(SessionMetadata.self, from: valueData) else {
+                return nil
+            }
+            return (metadata: metadata, tempKeyDataRep: genericData)
+        }
+    }
+
+    /// Fallback for macOS versions where kSecReturnData + kSecMatchLimitAll fails.
+    private func listSessionsFallback() throws -> [(metadata: SessionMetadata, tempKeyDataRep: Data)] {
         var query = baseQuery()
         query[kSecReturnAttributes as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitAll
@@ -132,7 +172,6 @@ public class SessionKeychainStore {
         }
         guard let result = result else { return [] }
 
-        // kSecMatchLimitAll returns [[String: Any]] for multiple, [String: Any] for one
         var items: [[String: Any]]
         if let array = result as? [[String: Any]] {
             items = array
@@ -142,7 +181,6 @@ public class SessionKeychainStore {
             return []
         }
 
-        // Fetch full data for each session individually
         return items.compactMap { item in
             guard let account = item[kSecAttrAccount as String] as? String else { return nil }
             return loadSession(name: account)
@@ -195,8 +233,45 @@ public class SessionKeychainStore {
         return secret
     }
 
-    /// Load all re-wrapped secrets for a session.
+    /// Load all re-wrapped secrets for a session in a single query.
     public func loadAllSessionSecrets(sessionName: String) -> [String: EncryptedSecret] {
+        let svc = secretService(sessionName: sessionName)
+        var query = baseQuery(service: svc)
+        query[kSecReturnData as String] = true
+        query[kSecReturnAttributes as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitAll
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+
+        if status == errSecParam {
+            // Fallback for macOS versions where kSecReturnData + kSecMatchLimitAll fails
+            return loadAllSessionSecretsFallback(sessionName: sessionName)
+        }
+        guard status == errSecSuccess, let result = result else { return [:] }
+
+        var items: [[String: Any]]
+        if let array = result as? [[String: Any]] {
+            items = array
+        } else if let single = result as? [String: Any] {
+            items = [single]
+        } else {
+            return [:]
+        }
+
+        var secrets: [String: EncryptedSecret] = [:]
+        for item in items {
+            guard let account = item[kSecAttrAccount as String] as? String,
+                  let data = item[kSecValueData as String] as? Data,
+                  let secret = try? Self.decoder.decode(EncryptedSecret.self, from: data) else {
+                continue
+            }
+            secrets[account] = secret
+        }
+        return secrets
+    }
+
+    private func loadAllSessionSecretsFallback(sessionName: String) -> [String: EncryptedSecret] {
         let svc = secretService(sessionName: sessionName)
         var query = baseQuery(service: svc)
         query[kSecReturnAttributes as String] = true
@@ -204,7 +279,6 @@ public class SessionKeychainStore {
 
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
-
         guard status == errSecSuccess, let result = result else { return [:] }
 
         var items: [[String: Any]]
