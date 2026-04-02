@@ -5,7 +5,12 @@ import KeypoCore
 struct VaultInitCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "init",
-        abstract: "Initialize the vault with Secure Enclave keys"
+        abstract: "Initialize the vault with Secure Enclave keys",
+        discussion: """
+        Examples:
+          keypo-signer vault init
+          keypo-signer vault init --open-only
+        """
     )
 
     @OptionGroup var globals: GlobalOptions

@@ -6,7 +6,12 @@ import KeypoCore
 struct VerifyCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "verify",
-        abstract: "Verify a signature against a public key"
+        abstract: "Verify a signature against a public key",
+        discussion: """
+        Examples:
+          keypo-signer verify 0xdeadbeef 0x3045... --key my-key
+          keypo-signer verify 0xdeadbeef 0x3045... --public-key 0x04abcd...
+        """
     )
 
     @OptionGroup var globals: GlobalOptions

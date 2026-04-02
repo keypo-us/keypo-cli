@@ -5,7 +5,11 @@ import KeypoCore
 struct RotateCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "rotate",
-        abstract: "Replace a key with a new one, keeping the same label and policy"
+        abstract: "Replace a key with a new one, keeping the same label and policy",
+        discussion: """
+        Examples:
+          keypo-signer rotate my-key
+        """
     )
 
     @OptionGroup var globals: GlobalOptions

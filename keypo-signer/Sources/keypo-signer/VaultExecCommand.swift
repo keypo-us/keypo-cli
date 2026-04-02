@@ -7,7 +7,14 @@ import LocalAuthentication
 struct VaultExecCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "exec",
-        abstract: "Decrypt secrets and inject them into a child process"
+        abstract: "Decrypt secrets and inject them into a child process",
+        discussion: """
+        Examples:
+          keypo-signer vault exec --allow API_KEY,DB_PASS -- npm start
+          keypo-signer vault exec --env .env.example -- python app.py
+          keypo-signer vault exec --allow '*' -- printenv
+          keypo-signer vault exec --session orbital-canvas -- npm start
+        """
     )
 
     @OptionGroup var globals: GlobalOptions

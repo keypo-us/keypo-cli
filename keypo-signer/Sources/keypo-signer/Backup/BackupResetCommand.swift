@@ -7,7 +7,11 @@ import LocalAuthentication
 struct VaultBackupResetCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "backup-reset",
-        abstract: "Regenerate backup encryption key and passphrase"
+        abstract: "Regenerate backup encryption key and passphrase",
+        discussion: """
+        Examples:
+          keypo-signer vault backup-reset
+        """
     )
 
     @OptionGroup var globals: GlobalOptions

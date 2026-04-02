@@ -6,7 +6,12 @@ import LocalAuthentication
 struct VaultGetCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "get",
-        abstract: "Decrypt and output a secret"
+        abstract: "Decrypt and output a secret",
+        discussion: """
+        Examples:
+          keypo-signer vault get API_KEY
+          keypo-signer vault get API_KEY --format raw
+        """
     )
 
     @OptionGroup var globals: GlobalOptions

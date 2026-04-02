@@ -6,7 +6,12 @@ import LocalAuthentication
 struct SignCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "sign",
-        abstract: "Sign data with a Secure Enclave key"
+        abstract: "Sign data with a Secure Enclave key",
+        discussion: """
+        Examples:
+          keypo-signer sign 0xdeadbeef --key my-key
+          echo -n "0xdeadbeef" | keypo-signer sign --stdin --key my-key
+        """
     )
 
     @OptionGroup var globals: GlobalOptions

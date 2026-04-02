@@ -5,7 +5,12 @@ import KeypoCore
 struct SessionEndCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "end",
-        abstract: "End one or all sessions"
+        abstract: "End one or all sessions",
+        discussion: """
+        Examples:
+          keypo-signer vault session end orbital-canvas
+          keypo-signer vault session end --all
+        """
     )
 
     @OptionGroup var globals: GlobalOptions

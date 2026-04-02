@@ -7,7 +7,11 @@ import LocalAuthentication
 struct VaultBackupCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "backup",
-        abstract: "Encrypt and back up vault secrets to iCloud Drive"
+        abstract: "Encrypt and back up vault secrets to iCloud Drive",
+        discussion: """
+        Examples:
+          keypo-signer vault backup
+        """
     )
 
     @OptionGroup var globals: GlobalOptions

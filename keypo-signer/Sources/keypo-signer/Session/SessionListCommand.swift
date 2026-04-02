@@ -5,7 +5,12 @@ import KeypoCore
 struct SessionListCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "list",
-        abstract: "List active sessions"
+        abstract: "List active sessions",
+        discussion: """
+        Examples:
+          keypo-signer vault session list
+          keypo-signer vault session list --format pretty
+        """
     )
 
     @OptionGroup var globals: GlobalOptions
