@@ -20,6 +20,7 @@ struct VaultCommand: ParsableCommand {
             VaultRestoreCommand.self,
             VaultBackupResetCommand.self,
             VaultBackupInfoCommand.self,
+            SessionCommand.self,
         ]
     )
 }

@@ -21,10 +21,19 @@ struct VaultExecCommand: ParsableCommand {
     @Option(name: [.customLong("reason"), .customLong("bio-reason")], help: "Custom Touch ID prompt message (default: shows command name)")
     var reason: String?
 
+    @Option(name: .long, help: "Session name for authenticated exec")
+    var session: String?
+
     @Argument(parsing: .captureForPassthrough)
     var command: [String] = []
 
     mutating func run() throws {
+        // Session-based exec path — must be checked before allow/env guard
+        if let sessionName = session {
+            try runWithSession(sessionName: sessionName)
+            return
+        }
+
         // Validate at least one source of secret names
         guard allow != nil || env != nil else {
             writeStderr("at least one of --allow or --env is required")
@@ -257,6 +266,117 @@ struct VaultExecCommand: ParsableCommand {
         decryptedSecrets.removeAll()
 
         // Forward child's exit code
+        throw ExitCode(process.terminationStatus)
+    }
+
+    // MARK: - Session-based Exec
+
+    private func runWithSession(sessionName: String) throws {
+        // Mutual exclusion: --session with --allow or --env
+        if allow != nil || env != nil {
+            writeStderr("--session is mutually exclusive with --allow and --env")
+            throw ExitCode(126)
+        }
+
+        guard !command.isEmpty else {
+            writeStderr("no command specified after --")
+            throw ExitCode(126)
+        }
+
+        let execArgs = ExecArgsHelper.prepareExecArgs(command)
+        guard !execArgs.isEmpty else {
+            writeStderr("no command specified after --")
+            throw ExitCode(126)
+        }
+
+        let sessionManager = SessionManager()
+
+        // Validate session
+        let metadata: SessionMetadata
+        do {
+            metadata = try sessionManager.validateSession(name: sessionName)
+        } catch let error as SessionError {
+            // Log session.exec_denied audit entry before throwing
+            let reason: String
+            switch error {
+            case .sessionNotFound: reason = "not_found"
+            case .sessionExpired: reason = "expired"
+            case .sessionExhausted: reason = "exhausted"
+            default: reason = "unknown"
+            }
+            sessionManager.auditLog.log(AuditEntry(
+                event: "session.exec_denied",
+                session: sessionName,
+                details: .execDenied(SessionExecDeniedDetails(reason: reason, command: execArgs[0]))
+            ))
+            writeStderr("\(error)")
+            throw ExitCode(5)
+        }
+
+        // Decrypt all session secrets
+        var decryptedSecrets: [String: String]
+        do {
+            decryptedSecrets = try sessionManager.decryptSessionSecrets(session: metadata)
+        } catch {
+            writeStderr("failed to decrypt session secrets: \(error)")
+            throw ExitCode(126)
+        }
+
+        // Decrement usage
+        let updated: SessionMetadata
+        do {
+            updated = try sessionManager.decrementUsage(session: metadata)
+        } catch {
+            writeStderr("keychain error: \(error)")
+            throw ExitCode(126)
+        }
+
+        // Build child environment
+        var childEnv = ProcessInfo.processInfo.environment
+        for (name, value) in decryptedSecrets {
+            childEnv[name] = value
+        }
+
+        let displayArgs = execArgs.joined(separator: " ")
+        writeStderrRaw("keypo-vault: session '\(sessionName)' — decrypting \(decryptedSecrets.count) secret(s) for: \(displayArgs)")
+
+        // Spawn child process
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = execArgs
+        process.environment = childEnv
+
+        do {
+            try process.run()
+        } catch {
+            writeStderr("command not found: \(execArgs.first ?? "")")
+            throw ExitCode(127)
+        }
+
+        // Write audit entry after spawn (to capture childPid)
+        sessionManager.auditLog.log(AuditEntry(
+            event: "session.exec",
+            session: sessionName,
+            details: .exec(SessionExecDetails(
+                command: execArgs[0],
+                secretsInjected: metadata.secrets,
+                usesRemaining: updated.usesRemaining,
+                childPid: Int(process.processIdentifier)
+            ))
+        ))
+
+        // Transfer foreground for TTY stdin forwarding
+        if isatty(STDIN_FILENO) != 0 {
+            tcsetpgrp(STDIN_FILENO, process.processIdentifier)
+        }
+
+        process.waitUntilExit()
+
+        if isatty(STDIN_FILENO) != 0 {
+            tcsetpgrp(STDIN_FILENO, getpgrp())
+        }
+
+        decryptedSecrets.removeAll()
         throw ExitCode(process.terminationStatus)
     }
 }

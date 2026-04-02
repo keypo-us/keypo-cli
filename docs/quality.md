@@ -16,8 +16,8 @@ status: current
 | keypo-wallet (scaffolding) | 3 | `cargo test --test '*'` |
 | keypo-wallet (integration) | 10 (ignored in CI) | `cargo test -- --ignored --test-threads=1` |
 | keypo-account (Foundry) | 30 | `forge test` |
-| keypo-signer (Swift) | 222 | `swift test` |
-| **Total (non-ignored)** | **189 Rust + 30 Foundry + 222 Swift = 441** | |
+| keypo-signer (Swift) | 293 | `swift test` |
+| **Total (non-ignored)** | **189 Rust + 30 Foundry + 293 Swift = 512** | |
 
 ## Integration Test Requirements
 
@@ -86,6 +86,6 @@ status: current
 ## Known Gaps
 
 - No code coverage measurement configured (consider `cargo-tarpaulin` or `cargo-llvm-cov`)
-- ~~Swift test count not tracked automatically~~ (now tracked: 222 tests)
+- ~~Swift test count not tracked automatically~~ (now tracked: 293 tests, +71 session tests)
 - No fuzz testing for ABI encoding/decoding
 - WebAuthn frontend tests are manual only (`tests/webauthn-frontend/`)

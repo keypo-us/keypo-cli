@@ -226,6 +226,110 @@ public class VaultManager {
         return result
     }
 
+    // MARK: - Session ECIES Encryption
+
+    /// Encrypt a secret for session storage. Uses session-specific HKDF parameters:
+    /// salt = sessionName (UTF-8), info prefix = "keypo-session-v1" (domain separation).
+    public func encryptForSession(plaintext: Data, secretName: String, sessionName: String,
+                                   sePublicKey: P256.KeyAgreement.PublicKey) throws -> EncryptedSecretData {
+        let ephemeralPrivate = P256.KeyAgreement.PrivateKey()
+
+        let sharedSecret: SharedSecret
+        do {
+            sharedSecret = try ephemeralPrivate.sharedSecretFromKeyAgreement(with: sePublicKey)
+        } catch {
+            throw VaultError.encryptionFailed("ECDH failed: \(error.localizedDescription)")
+        }
+
+        let info = Data("keypo-session-v1".utf8) + Data(secretName.utf8)
+        var symmetricKey = sharedSecret.hkdfDerivedSymmetricKey(
+            using: SHA256.self,
+            salt: Data(sessionName.utf8),
+            sharedInfo: info,
+            outputByteCount: 32
+        )
+        defer { symmetricKey = SymmetricKey(size: .bits256) }
+
+        let sealedBox: AES.GCM.SealedBox
+        do {
+            sealedBox = try AES.GCM.seal(plaintext, using: symmetricKey)
+        } catch {
+            throw VaultError.encryptionFailed("AES-GCM seal failed: \(error.localizedDescription)")
+        }
+
+        let now = Date()
+        return EncryptedSecretData(
+            ephemeralPublicKey: Data(ephemeralPrivate.publicKey.x963Representation),
+            nonce: Data(sealedBox.nonce),
+            ciphertext: Data(sealedBox.ciphertext),
+            tag: Data(sealedBox.tag),
+            createdAt: now,
+            updatedAt: now
+        )
+    }
+
+    // MARK: - Session ECIES Decryption
+
+    /// Decrypt a session-stored secret. Uses session-specific HKDF parameters.
+    /// No authContext needed — session temp keys have open policy.
+    public func decryptFromSession(encryptedData: EncryptedSecretData, secretName: String,
+                                    sessionName: String, seKeyDataRepresentation: Data) throws -> Data {
+        let sePrivateKey: SecureEnclave.P256.KeyAgreement.PrivateKey
+        do {
+            sePrivateKey = try SecureEnclave.P256.KeyAgreement.PrivateKey(
+                dataRepresentation: seKeyDataRepresentation
+            )
+        } catch {
+            throw KeypoError.keyMissing("failed to load session SE key: \(error.localizedDescription)")
+        }
+
+        let ephemeralPublicKey: P256.KeyAgreement.PublicKey
+        do {
+            ephemeralPublicKey = try P256.KeyAgreement.PublicKey(x963Representation: encryptedData.ephemeralPublicKey)
+        } catch {
+            throw VaultError.invalidEphemeralKey("failed to reconstruct ephemeral public key: \(error.localizedDescription)")
+        }
+
+        let sharedSecret: SharedSecret
+        do {
+            sharedSecret = try sePrivateKey.sharedSecretFromKeyAgreement(with: ephemeralPublicKey)
+        } catch {
+            throw VaultError.decryptionFailed("ECDH failed: \(error.localizedDescription)")
+        }
+
+        let info = Data("keypo-session-v1".utf8) + Data(secretName.utf8)
+        var symmetricKey = sharedSecret.hkdfDerivedSymmetricKey(
+            using: SHA256.self,
+            salt: Data(sessionName.utf8),
+            sharedInfo: info,
+            outputByteCount: 32
+        )
+        defer { symmetricKey = SymmetricKey(size: .bits256) }
+
+        let sealedBox: AES.GCM.SealedBox
+        do {
+            let nonce = try AES.GCM.Nonce(data: encryptedData.nonce)
+            sealedBox = try AES.GCM.SealedBox(
+                nonce: nonce,
+                ciphertext: encryptedData.ciphertext,
+                tag: encryptedData.tag
+            )
+        } catch {
+            throw VaultError.decryptionFailed("failed to reconstruct sealed box: \(error.localizedDescription)")
+        }
+
+        var plaintext: Data
+        do {
+            plaintext = try AES.GCM.open(sealedBox, using: symmetricKey)
+        } catch {
+            throw VaultError.decryptionFailed("AES-GCM open failed: \(error.localizedDescription)")
+        }
+
+        let result = Data(plaintext)
+        plaintext.resetBytes(in: 0..<plaintext.count)
+        return result
+    }
+
     // MARK: - Integrity Envelope Creation
 
     public func createIntegrityEnvelope(seKeyDataRepresentation: Data,
