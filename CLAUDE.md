@@ -53,6 +53,7 @@ cd keypo-wallet && cargo test -- --ignored --test-threads=1
 | [keypo-signer/CLAUDE.md](keypo-signer/CLAUDE.md) | Swift project: architecture, conventions, gotchas |
 | [keypo-signer/JSON-FORMAT.md](keypo-signer/JSON-FORMAT.md) | Verified JSON output schema for all signer commands |
 | [keypo-openclaw/README.md](keypo-openclaw/README.md) | OpenClaw integration: commands, provider config, vault policies |
+| [docs/specs/vault-sessions-spec.md](docs/specs/vault-sessions-spec.md) | Vault sessions: scoped, time-limited secret access for agent workflows |
 
 ## Active Conventions
 

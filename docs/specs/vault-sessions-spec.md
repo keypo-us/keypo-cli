@@ -1,3 +1,10 @@
+---
+title: Vault Sessions Specification
+owner: "@davidblumenfeld"
+last_verified: 2026-04-02
+status: draft
+---
+
 # Vault Sessions Specification
 
 **Status:** Draft
