@@ -4,8 +4,9 @@ description: Use when managing Secure Enclave signing keys or encrypted secrets.
   Use for creating/listing/deleting P-256 keys, signing digests, running commands
   with secrets injected via vault exec, storing/retrieving encrypted secrets.
   Also use when an agent needs API keys, private keys, or credentials injected
-  into a subprocess without exposing them.
-version: "0.1.0"
+  into a subprocess without exposing them. Use vault sessions for unattended
+  agent workflows that need repeated access to protected secrets.
+version: "0.4.7"
 metadata:
   author: keypo-us
   compatibility: macOS Apple Silicon only
@@ -27,9 +28,9 @@ This installs the `keypo-signer` Swift CLI for Secure Enclave key management and
 **Before using any keypo-signer command for the first time in a session, run `keypo-signer help <command>` to learn the exact flags, syntax, and examples.** The help output is the authoritative reference for each command.
 
 ```bash
-keypo-signer help vault exec   # learn vault exec flags before using
-keypo-signer help create       # learn create flags before creating keys
-keypo-signer help sign         # learn sign flags before signing
+keypo-signer help vault exec      # learn vault exec flags before using
+keypo-signer help vault session   # learn session subcommands
+keypo-signer help create          # learn create flags before creating keys
 ```
 
 Do not guess flag names or assume positional arguments. Every command documents its interface via `help`.
@@ -112,6 +113,7 @@ keypo-signer vault exec --allow '*' -- sh -c echo $FOO && echo $BAR
 | Code | Meaning | Agent Action |
 |------|---------|--------------|
 | 0 | Success | Continue |
+| 5 | Session expired, exhausted, or not found | Create a new session |
 | 126 | Vault error (not initialized, secret not found, integrity failure) | Report error to user |
 | 127 | Command not found | Fix the command path |
 | 128 | User cancelled authentication | **Do not retry** — user declined |
@@ -147,6 +149,74 @@ keypo-signer vault list
 
 ---
 
+## Sessions (Unattended Agent Workflows)
+
+Sessions let a human authenticate once and grant scoped, time-limited access to specific secrets. After session creation, `vault exec --session` runs without auth prompts — ideal for agent workflows that need repeated access to protected secrets.
+
+### Create a session
+
+```bash
+# Authenticate once, grant 30-minute access to specific secrets
+keypo-signer vault session start --secrets API_KEY,DB_PASSWORD --ttl 30m
+
+# With a usage limit
+keypo-signer vault session start --secrets API_KEY --ttl 1h --max-uses 50
+```
+
+The human approves via Touch ID (if secrets are in biometric vault), and a session is created with a random name (e.g., `orbital-canvas`).
+
+### Use a session
+
+```bash
+# No auth prompt — session handles it
+keypo-signer vault exec --session orbital-canvas -- npm start
+keypo-signer vault exec --session orbital-canvas -- python app.py
+```
+
+`--session` is mutually exclusive with `--allow` and `--env`. The session fully defines which secrets are injected.
+
+### Manage sessions
+
+```bash
+# List active sessions
+keypo-signer vault session list
+
+# Check session details (secrets, TTL, uses remaining)
+keypo-signer vault session status orbital-canvas
+
+# Extend a session (re-authenticates)
+keypo-signer vault session refresh orbital-canvas --ttl 2h
+
+# End a session early
+keypo-signer vault session end orbital-canvas
+
+# End all sessions
+keypo-signer vault session end --all
+```
+
+### Agent workflow pattern
+
+The recommended pattern for agents that need protected secrets:
+
+1. **Human creates a session** (one-time, interactive):
+   ```bash
+   keypo-signer vault session start --secrets API_KEY,DB_PASS --ttl 1h --max-uses 100
+   ```
+2. **Agent uses the session** (repeated, unattended):
+   ```bash
+   keypo-signer vault exec --session <name> -- <agent-command>
+   ```
+3. **Session expires automatically** after TTL or usage limit.
+
+### Session security
+
+- Sessions are scoped to specific secrets — they cannot access other secrets.
+- Secrets are re-encrypted under a temporary SE key. The session is self-contained.
+- Every session action is recorded in an audit log at `~/.keypo/session-audit.log`.
+- Sessions expire after TTL or usage limit. Expired sessions are cleaned up automatically.
+
+---
+
 ## Storing Secrets
 
 ### Initialize vaults
@@ -160,10 +230,11 @@ Creates three vaults: `open`, `passcode`, and `biometric`. Each is backed by its
 ### Store a secret
 
 ```bash
-keypo-signer vault set MY_API_KEY --vault biometric
+echo -n "sk_live_abc123" | keypo-signer vault set API_KEY --vault biometric
+keypo-signer vault set DB_PASSWORD --vault passcode
 ```
 
-Prompts for the secret value interactively (never pass secrets as command arguments). Default vault is `biometric`.
+Pipe the value via stdin, or omit it to be prompted interactively. Default vault is the highest available tier.
 
 ### Bulk import from .env file
 
@@ -207,6 +278,43 @@ Permanently deletes all vaults, secrets, and vault keys. Irreversible.
 
 ---
 
+## Backup & Restore
+
+### Back up to iCloud Drive
+
+```bash
+keypo-signer vault backup
+```
+
+Encrypts all vault secrets and writes them to iCloud Drive. Encryption uses two factors: an iCloud Keychain synced key + a passphrase displayed once. Both are required to restore.
+
+### Check backup status
+
+```bash
+keypo-signer vault backup-info
+```
+
+Shows whether a backup exists, its age, and any unbackup'd secrets.
+
+### Restore from backup
+
+```bash
+keypo-signer vault restore
+keypo-signer vault restore --previous
+```
+
+Decrypts the backup, compares to local vault, and offers: cancel, replace, merge, or back-up-first. `--previous` restores from the prior backup instead of the current one.
+
+### Reset backup key
+
+```bash
+keypo-signer vault backup-reset
+```
+
+Regenerates the backup encryption key and passphrase. Use when you suspect the passphrase was compromised.
+
+---
+
 ## Vault Policies
 
 | Policy | Auth | Use for |
@@ -215,7 +323,7 @@ Permanently deletes all vaults, secrets, and vault keys. Irreversible.
 | **passcode** | Device passcode | When Touch ID isn't available or for moderate-sensitivity secrets |
 | **open** | None | Non-sensitive dev config only (test RPC URLs, public endpoints) |
 
-For agent workflows, store secrets in `open` or `passcode` vaults. `biometric` requires interactive Touch ID which blocks automation.
+For agent workflows, store secrets in `open` or `passcode` vaults. `biometric` requires interactive Touch ID which blocks automation — use **sessions** to grant time-limited access to biometric secrets without repeated prompts.
 
 ---
 
@@ -240,7 +348,7 @@ Shows all managed keys with labels, policies, and creation dates.
 ### Key details
 
 ```bash
-keypo-signer info --label my-key
+keypo-signer info my-key
 ```
 
 Shows public key, policy, and metadata for a specific key.
@@ -248,21 +356,22 @@ Shows public key, policy, and metadata for a specific key.
 ### Sign a digest
 
 ```bash
-keypo-signer sign --label my-key --digest 0x<32-byte-hex>
+keypo-signer sign 0xdeadbeef --key my-key
 ```
 
-Signs a raw 32-byte digest. Uses prehash signing (no double-hashing). Output is a DER-encoded P-256 signature.
+Signs raw hex-encoded data. Uses prehash signing (no double-hashing). Output is a DER-encoded P-256 signature.
 
 ### Verify a signature
 
 ```bash
-keypo-signer verify --public-key 0x<pubkey> --digest 0x<digest> --signature 0x<sig>
+keypo-signer verify 0xdeadbeef 0x3045... --key my-key
+keypo-signer verify 0xdeadbeef 0x3045... --public-key 0x04abcd...
 ```
 
 ### Delete a key
 
 ```bash
-keypo-signer delete --label my-key --confirm
+keypo-signer delete my-key --confirm
 ```
 
 Permanently destroys the key from the Secure Enclave. Irreversible.
@@ -270,7 +379,7 @@ Permanently destroys the key from the Secure Enclave. Irreversible.
 ### Rotate a key
 
 ```bash
-keypo-signer rotate --label my-key
+keypo-signer rotate my-key
 ```
 
 Generates a new key with the same label and policy, replacing the old one.
@@ -295,8 +404,18 @@ Generates a new key with the same label and policy, replacing the old one.
 | `vault delete` | Remove a secret | Yes (secret's vault policy) |
 | `vault list` | List vaults and secret names | No |
 | `vault exec` | Inject secrets into child process | Yes (per vault used) |
+| `vault exec --session` | Inject secrets via session (no auth) | No (session pre-authorized) |
 | `vault import` | Bulk import from .env file | Yes (target vault's policy) |
 | `vault destroy` | Delete all vaults and secrets | Yes (all vaults) |
+| `vault backup` | Encrypt and back up to iCloud Drive | Yes (all vaults) |
+| `vault backup-info` | Show backup status | No |
+| `vault backup-reset` | Regenerate backup key and passphrase | Yes |
+| `vault restore` | Restore from iCloud backup | Yes (passphrase + iCloud key) |
+| `vault session start` | Create a scoped, time-limited session | Yes (per secret's vault) |
+| `vault session list` | List active sessions | No |
+| `vault session status` | Show session details | No |
+| `vault session refresh` | Extend session TTL or usage limits | Yes (re-authenticates) |
+| `vault session end` | End one or all sessions | No |
 
 Run `keypo-signer help <command>` or `keypo-signer help vault <subcommand>` for flags and examples.
 
@@ -309,3 +428,5 @@ Run `keypo-signer help <command>` or `keypo-signer help vault <subcommand>` for 
 - Use `vault exec` instead of `vault get` in all automated workflows.
 - For agent use, `open` policy keys and vaults avoid interactive auth prompts.
 - For high-value secrets, prefer `biometric` or `passcode` vaults with interactive user approval.
+- **Sessions** are the recommended way for agents to access protected (biometric/passcode) secrets — authenticate once, then run unattended within the session's TTL and usage limits.
+- All session lifecycle events are recorded in `~/.keypo/session-audit.log` for forensic traceability.
