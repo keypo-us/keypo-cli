@@ -73,6 +73,42 @@ keypo-signer vault exec --env .env.example -- npm start
 
 This is the recommended way for AI agents to run commands that need secrets. See [skills/vault/SKILL.md](../skills/vault/SKILL.md) for agent usage.
 
+### Sessions
+
+Sessions let you authenticate once and grant scoped, time-limited access to specific secrets — no repeated Touch ID prompts. Designed for AI agent workflows where unattended operation is needed.
+
+```bash
+# Create a session (authenticates once via Touch ID if needed)
+keypo-signer vault session start --secrets API_KEY,DB_PASSWORD --ttl 30m --max-uses 50
+
+# Run commands using the session — no auth prompts
+keypo-signer vault exec --session orbital-canvas -- npm start
+
+# List active sessions
+keypo-signer vault session list
+
+# Check session details
+keypo-signer vault session status orbital-canvas
+
+# Extend a session (re-authenticates)
+keypo-signer vault session refresh orbital-canvas --ttl 1h
+
+# End a session early
+keypo-signer vault session end orbital-canvas
+```
+
+Sessions are scoped to the exact secrets you specify — they cannot access other secrets. They expire automatically after the TTL or when uses are exhausted. Every session action is recorded in an audit log at `~/.keypo/session-audit.log`.
+
+| Command | Description |
+|---|---|
+| `vault session start` | Create a session for specific secrets with TTL and optional usage limit |
+| `vault session list` | List active sessions (expired sessions are auto-cleaned) |
+| `vault session status <name>` | Show detailed session metadata including original vault tiers |
+| `vault session refresh <name>` | Extend TTL or usage limits (requires re-authentication) |
+| `vault session end <name>` | End a session and delete its temporary key |
+| `vault session end --all` | End all active sessions |
+| `vault exec --session <name>` | Run a command using session-scoped secrets (no auth prompt) |
+
 ### Backup & Restore
 
 `vault backup` encrypts all vault secrets and writes them to iCloud Drive. Encryption uses two factors: an iCloud Keychain synced key (available on all your Apple devices) and a passphrase displayed once at backup time. Both are required to restore — neither alone is sufficient. You can store your passphrase at [keypo.io/app](https://www.keypo.io/app) or write it down in a safe place.
