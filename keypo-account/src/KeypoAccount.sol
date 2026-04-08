@@ -31,8 +31,9 @@ contract KeypoAccount is Account, SignerP256, ERC7821, Initializable {
         _setSigner(qx, qy);
     }
 
+    /// @dev ENTRYPOINT_V08 compatible with eip7702
     function entryPoint() public view virtual override returns (IEntryPoint) {
-        return ERC4337Utils.ENTRYPOINT_V07;
+        return ERC4337Utils.ENTRYPOINT_V08;
     }
 
     /// @dev Validates signatures via two paths:
